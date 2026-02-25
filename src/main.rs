@@ -183,71 +183,68 @@ fn event_loop(connection: Connection, params: serde_json::Value) -> Result<()> {
     for msg in &connection.receiver { eprintln!("Connection received message {:?}", msg); match msg {
             Message::Request(req) => {
                 let method = req.method.as_str();
-                match method {
-                    "textDocument/definition" => {
-                        match cast::<GotoDefinition>(req) {
-                            Ok((id, params)) => {
-                                eprintln!("Received goto definition request {:?}", params);
-                                let current_file =
-                                    params.text_document_position_params.text_document.uri;
+                if method == "textDocument/definition" {
+                    match cast::<GotoDefinition>(req) {
+                        Ok((id, params)) => {
+                            eprintln!("Received goto definition request {:?}", params);
+                            let current_file =
+                                params.text_document_position_params.text_document.uri;
 
-                                if let Some(file) = files.get(&current_file.to_string()) {
-                                    // let path = current_file.to_file_path().unwrap().parent().unwrap();
-                                    let position = params.text_document_position_params.position;
-                                    let line = position.line as usize;
+                            if let Some(file) = files.get(&current_file.to_string()) {
+                                // let path = current_file.to_file_path().unwrap().parent().unwrap();
+                                let position = params.text_document_position_params.position;
+                                let line = position.line as usize;
 
-                                    if let Some(mut path) = file.get(&line) {
-                                        let dir_path = PathBuf::from(path.file_stem().unwrap());
-                                        let dir_path =
-                                            path.parent().unwrap().join(dir_path.clone());
-                                        eprintln!("Dir Path: {}", dir_path.display());
-                                        if !path.exists() {
-                                            eprintln!("Path {} does not exist", path.display());
-                                            if !dir_path.exists() {
-                                                eprintln!(
-                                                    "Dir Path {} does not exist",
-                                                    dir_path.display()
-                                                );
-                                                continue;
-                                            } else {
-                                                path = &dir_path;
-                                            }
+                                if let Some(mut path) = file.get(&line) {
+                                    let dir_path = PathBuf::from(path.file_stem().unwrap());
+                                    let dir_path =
+                                        path.parent().unwrap().join(dir_path.clone());
+                                    eprintln!("Dir Path: {}", dir_path.display());
+                                    if !path.exists() {
+                                        eprintln!("Path {} does not exist", path.display());
+                                        if !dir_path.exists() {
+                                            eprintln!(
+                                                "Dir Path {} does not exist",
+                                                dir_path.display()
+                                            );
+                                            continue;
+                                        } else {
+                                            path = &dir_path;
                                         }
-                                        // This is a case where we are actually referencing a file in the
-                                        // same directory as the current file.
-                                        let mut complete_path = canonicalize(path)?;
-                                        if complete_path.is_dir() {
-                                            complete_path = complete_path.join("init.grlx");
-                                        }
-                                        let final_path =
-                                            lsp_types::Url::from_file_path(complete_path).unwrap();
-                                        eprintln!("Path: {}", final_path);
-                                        let result = GotoDefinitionResponse::Scalar(
-                                            lsp_types::Location::new(
-                                                final_path,
-                                                lsp_types::Range::new(
-                                                    lsp_types::Position::new(0, 0),
-                                                    lsp_types::Position::new(0, 0),
-                                                ),
-                                            ),
-                                        );
-                                        let result = serde_json::to_value(&result).unwrap();
-                                        let response = Response {
-                                            id: id.clone(),
-                                            result: Some(result),
-                                            error: None,
-                                        };
-                                        connection.sender.send(Message::Response(response))?;
                                     }
+                                    // This is a case where we are actually referencing a file in the
+                                    // same directory as the current file.
+                                    let mut complete_path = canonicalize(path)?;
+                                    if complete_path.is_dir() {
+                                        complete_path = complete_path.join("init.grlx");
+                                    }
+                                    let final_path =
+                                        lsp_types::Url::from_file_path(complete_path).unwrap();
+                                    eprintln!("Path: {}", final_path);
+                                    let result = GotoDefinitionResponse::Scalar(
+                                        lsp_types::Location::new(
+                                            final_path,
+                                            lsp_types::Range::new(
+                                                lsp_types::Position::new(0, 0),
+                                                lsp_types::Position::new(0, 0),
+                                            ),
+                                        ),
+                                    );
+                                    let result = serde_json::to_value(&result).unwrap();
+                                    let response = Response {
+                                        id: id.clone(),
+                                        result: Some(result),
+                                        error: None,
+                                    };
+                                    connection.sender.send(Message::Response(response))?;
                                 }
-
-                                continue;
                             }
-                            Err(err @ ExtractError::JsonError { .. }) => panic!("{err:?}"),
-                            Err(ExtractError::MethodMismatch(req)) => req,
-                        };
-                    }
-                    _ => {}
+
+                            continue;
+                        }
+                        Err(err @ ExtractError::JsonError { .. }) => panic!("{err:?}"),
+                        Err(ExtractError::MethodMismatch(req)) => req,
+                    };
                 }
                 // TODO: We need to handle multiple potential cases
             }
