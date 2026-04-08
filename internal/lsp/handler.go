@@ -63,6 +63,8 @@ func (h *Handler) Handle(ctx context.Context, reply jsonrpc2.Replier, req jsonrp
 		return h.handleCompletion(ctx, reply, req)
 	case "textDocument/hover":
 		return h.handleHover(ctx, reply, req)
+	case "textDocument/definition":
+		return h.handleDefinition(ctx, reply, req)
 	case "textDocument/diagnostic":
 		return reply(ctx, nil, nil)
 	default:
@@ -80,7 +82,8 @@ func (h *Handler) handleInitialize(_ context.Context, reply jsonrpc2.Replier, _ 
 			CompletionProvider: &protocol.CompletionOptions{
 				TriggerCharacters: []string{".", ":", "-", " "},
 			},
-			HoverProvider: true,
+			HoverProvider:      true,
+			DefinitionProvider: true,
 		},
 		ServerInfo: &protocol.ServerInfo{
 			Name:    "grlx-lsp",
