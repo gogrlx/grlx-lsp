@@ -102,6 +102,31 @@ steps:
 	}
 }
 
+func TestParseStepWithMultipleMethodKeys(t *testing.T) {
+	data := []byte(`
+steps:
+  bad step:
+    file.exists:
+      - name: /tmp/a
+    file.absent:
+      - name: /tmp/b
+`)
+	r := Parse(data)
+
+	found := false
+	for _, e := range r.Errors {
+		if e.Message == "step must have exactly one ingredient.method key" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected error about multiple ingredient.method keys, got: %v", r.Errors)
+	}
+	if len(r.Steps) != 0 {
+		t.Fatalf("expected invalid step to be skipped, got %d parsed steps", len(r.Steps))
+	}
+}
+
 func TestStepIDs(t *testing.T) {
 	data := []byte(`
 steps:

@@ -140,7 +140,7 @@ func (r *Recipe) parseStep(idNode, bodyNode *yaml.Node) {
 		return
 	}
 
-	if len(bodyNode.Content) < 2 {
+	if len(bodyNode.Content) != 2 {
 		r.Errors = append(r.Errors, ParseError{
 			Message: "step must have exactly one ingredient.method key",
 			Line:    bodyNode.Line,
