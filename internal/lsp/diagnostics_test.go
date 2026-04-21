@@ -78,6 +78,33 @@ func TestDiagnoseRequisiteUnknownRef(t *testing.T) {
 	}
 }
 
+func TestDiagnoseDuplicateStepIDs(t *testing.T) {
+	h := NewHandler(schema.DefaultRegistry())
+	src := `steps:
+  duplicate:
+    file.exists:
+      - name: /tmp/a
+  duplicate:
+    file.exists:
+      - name: /tmp/b`
+	doc := &document{
+		content: src,
+		recipe:  recipe.Parse([]byte(src)),
+	}
+
+	diags := h.diagnose(doc)
+	duplicateCount := 0
+	for _, d := range diags {
+		if d.Severity == protocol.DiagnosticSeverityError && d.Message == "duplicate step ID: duplicate" {
+			duplicateCount++
+		}
+	}
+
+	if duplicateCount != 2 {
+		t.Fatalf("expected duplicate step ID diagnostic on both step definitions, got %d diagnostics: %v", duplicateCount, diags)
+	}
+}
+
 func TestIsValidRequisiteType(t *testing.T) {
 	validTypes := []string{"require", "require_any", "onchanges", "onchanges_any", "onfail", "onfail_any"}
 	for _, rt := range validTypes {

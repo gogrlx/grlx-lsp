@@ -42,11 +42,24 @@ func (h *Handler) diagnose(doc *document) []protocol.Diagnostic {
 	}
 
 	stepIDs := make(map[string]bool)
+	duplicateStepIDs := make(map[string]bool)
 	for _, s := range doc.recipe.Steps {
+		if stepIDs[s.ID] {
+			duplicateStepIDs[s.ID] = true
+		}
 		stepIDs[s.ID] = true
 	}
 
 	for _, s := range doc.recipe.Steps {
+		if duplicateStepIDs[s.ID] {
+			diags = append(diags, protocol.Diagnostic{
+				Range:    yamlNodeRange(s.IDNode),
+				Severity: protocol.DiagnosticSeverityError,
+				Source:   "grlx-lsp",
+				Message:  "duplicate step ID: " + s.ID,
+			})
+		}
+
 		if s.Ingredient == "" {
 			continue
 		}
