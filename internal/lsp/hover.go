@@ -24,14 +24,23 @@ func (h *Handler) handleHover(_ context.Context, reply jsonrpc2.Replier, req jso
 		return reply(ctx, nil, nil)
 	}
 
-	line := lineAt(doc.content, int(params.Position.Line))
+	lineNumber := int(params.Position.Line)
+	line := lineAt(doc.content, lineNumber)
 	word := wordAtPosition(line, int(params.Position.Character))
 
 	if word == "" {
 		return reply(ctx, nil, nil)
 	}
 
-	// Check if it's an ingredient.method reference
+	if prop := h.findPropertyHover(doc, lineNumber, word); prop != nil {
+		return reply(ctx, &protocol.Hover{
+			Contents: protocol.MarkupContent{
+				Kind:  protocol.Markdown,
+				Value: buildPropertyMarkdown(prop.Ingredient, prop.Method, prop.Property),
+			},
+		}, nil)
+	}
+
 	if strings.Contains(word, ".") {
 		parts := strings.SplitN(word, ".", 2)
 		if len(parts) == 2 {
@@ -48,7 +57,6 @@ func (h *Handler) handleHover(_ context.Context, reply jsonrpc2.Replier, req jso
 		}
 	}
 
-	// Check if it's just an ingredient name
 	ing := h.registry.FindIngredient(word)
 	if ing != nil {
 		var methods []string
@@ -63,7 +71,6 @@ func (h *Handler) handleHover(_ context.Context, reply jsonrpc2.Replier, req jso
 		}, nil)
 	}
 
-	// Check if it's a requisite type
 	for _, rt := range h.registry.RequisiteTypes {
 		if rt.Name == word {
 			return reply(ctx, &protocol.Hover{
@@ -76,6 +83,44 @@ func (h *Handler) handleHover(_ context.Context, reply jsonrpc2.Replier, req jso
 	}
 
 	return reply(ctx, nil, nil)
+}
+
+type propertyHoverMatch struct {
+	Ingredient string
+	Method     string
+	Property   schema.Property
+}
+
+func (h *Handler) findPropertyHover(doc *document, lineNumber int, word string) *propertyHoverMatch {
+	if doc.recipe == nil {
+		return nil
+	}
+
+	for _, step := range doc.recipe.Steps {
+		if step.MethodNode == nil || step.MethodNode.Line-1 > lineNumber {
+			continue
+		}
+		for _, prop := range step.Properties {
+			if prop.Key != word || prop.KeyNode == nil || prop.KeyNode.Line-1 != lineNumber {
+				continue
+			}
+			method := h.registry.FindMethod(step.Ingredient, step.Method)
+			if method == nil {
+				return nil
+			}
+			for _, schemaProp := range method.Properties {
+				if schemaProp.Key == prop.Key {
+					return &propertyHoverMatch{
+						Ingredient: step.Ingredient,
+						Method:     step.Method,
+						Property:   schemaProp,
+					}
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 func buildMethodMarkdown(ingredient string, m *schema.Method) string {
@@ -98,6 +143,22 @@ func buildMethodMarkdown(ingredient string, m *schema.Method) string {
 			}
 			sb.WriteString("| `" + p.Key + "` | " + p.Type + " | " + req + " | " + desc + " |\n")
 		}
+	}
+	return sb.String()
+}
+
+func buildPropertyMarkdown(ingredient, method string, property schema.Property) string {
+	var sb strings.Builder
+	sb.WriteString("### `" + property.Key + "`\n\n")
+	sb.WriteString("Used by `" + ingredient + "." + method + "`\n\n")
+	sb.WriteString("- Type: `" + property.Type + "`\n")
+	if property.Required {
+		sb.WriteString("- Required: yes\n")
+	} else {
+		sb.WriteString("- Required: no\n")
+	}
+	if property.Description != "" {
+		sb.WriteString("\n" + property.Description)
 	}
 	return sb.String()
 }
