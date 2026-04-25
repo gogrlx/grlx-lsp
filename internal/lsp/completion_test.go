@@ -209,6 +209,34 @@ func TestIsInRequisiteValue(t *testing.T) {
 	}
 }
 
+func TestRequisiteValueAtPosition(t *testing.T) {
+	content := `steps:
+  first:
+    file.exists:
+      - name: /tmp/a
+  second:
+    file.exists:
+      - name: /tmp/b
+      - requisites:
+        - require: first
+        - onchanges:
+          - first`
+
+	ref, ok := requisiteValueAtPosition(content, 8, 20)
+	if !ok || ref != "first" {
+		t.Fatalf("expected inline requisite ref, got %q, %v", ref, ok)
+	}
+
+	ref, ok = requisiteValueAtPosition(content, 10, 12)
+	if !ok || ref != "first" {
+		t.Fatalf("expected sequence requisite ref, got %q, %v", ref, ok)
+	}
+
+	if _, ok = requisiteValueAtPosition(content, 9, 10); ok {
+		t.Fatal("condition line without value should not count as requisite value")
+	}
+}
+
 func TestIsPropertyPosition(t *testing.T) {
 	tests := []struct {
 		line string
