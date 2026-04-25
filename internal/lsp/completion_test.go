@@ -134,7 +134,7 @@ func TestCompleteStepIDs(t *testing.T) {
 	h.updateDocument("file:///test.grlx", src)
 	doc := h.getDocument("file:///test.grlx")
 
-	items := h.completeStepIDs(doc)
+	items := h.completeStepIDs("", doc)
 	if len(items) != 2 {
 		t.Errorf("expected 2 step IDs, got %d", len(items))
 	}
@@ -151,7 +151,7 @@ func TestCompleteStepIDsNilRecipe(t *testing.T) {
 	h := NewHandler(schema.DefaultRegistry())
 	doc := &document{content: "", recipe: nil}
 
-	items := h.completeStepIDs(doc)
+	items := h.completeStepIDs("", doc)
 	if len(items) != 0 {
 		t.Errorf("expected no step IDs for nil recipe, got %d", len(items))
 	}

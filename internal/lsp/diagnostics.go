@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"context"
+	"os"
 
 	"go.lsp.dev/protocol"
 	"gopkg.in/yaml.v3"
@@ -16,7 +17,7 @@ func (h *Handler) publishDiagnostics(ctx context.Context, uri string) {
 		return
 	}
 
-	diags := h.diagnose(doc)
+	diags := h.diagnose(uri, doc)
 
 	_ = h.conn.Notify(ctx, "textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
 		URI:         protocol.DocumentURI(uri),
@@ -24,7 +25,7 @@ func (h *Handler) publishDiagnostics(ctx context.Context, uri string) {
 	})
 }
 
-func (h *Handler) diagnose(doc *document) []protocol.Diagnostic {
+func (h *Handler) diagnose(uri string, doc *document) []protocol.Diagnostic {
 	var diags []protocol.Diagnostic
 
 	if doc.recipe == nil {
@@ -39,6 +40,32 @@ func (h *Handler) diagnose(doc *document) []protocol.Diagnostic {
 			Source:   "grlx-lsp",
 			Message:  e.Message,
 		})
+	}
+
+	// Validate includes and collect cross-file step IDs
+	crossFileStepIDs := make(map[string]bool)
+	currentFile := uriToPath(uri)
+	for _, inc := range doc.recipe.Includes {
+		resolved, ok := recipe.ResolveInclude(h.workspaceRoot, currentFile, inc.Value)
+		if !ok {
+			if inc.Node != nil {
+				diags = append(diags, protocol.Diagnostic{
+					Range:    yamlNodeRange(inc.Node),
+					Severity: protocol.DiagnosticSeverityWarning,
+					Source:   "grlx-lsp",
+					Message:  "cannot resolve include: " + inc.Value,
+				})
+			}
+			continue
+		}
+		data, err := os.ReadFile(resolved)
+		if err != nil {
+			continue
+		}
+		incRecipe := recipe.Parse(data)
+		for _, id := range incRecipe.StepIDs() {
+			crossFileStepIDs[id] = true
+		}
 	}
 
 	stepIDs := make(map[string]bool)
@@ -100,12 +127,12 @@ func (h *Handler) diagnose(doc *document) []protocol.Diagnostic {
 				})
 			}
 			for _, ref := range req.StepIDs {
-				if !stepIDs[ref] {
+				if !stepIDs[ref] && !crossFileStepIDs[ref] {
 					diags = append(diags, protocol.Diagnostic{
 						Range:    yamlNodeRange(req.Node),
 						Severity: protocol.DiagnosticSeverityWarning,
 						Source:   "grlx-lsp",
-						Message:  "reference to unknown step: " + ref + " (may be defined in an included recipe)",
+						Message:  "reference to unknown step: " + ref,
 					})
 				}
 			}

@@ -1,6 +1,9 @@
 package recipe
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseSimpleRecipe(t *testing.T) {
 	data := []byte(`
@@ -197,8 +200,6 @@ func TestParseEmptyRecipe(t *testing.T) {
 }
 
 func TestParseGoTemplate(t *testing.T) {
-	// Recipes can contain Go template syntax — the parser should not crash.
-	// Template directives may cause YAML errors, but the parser should handle gracefully.
 	data := []byte(`
 steps:
   install golang:
@@ -208,5 +209,107 @@ steps:
 	r := Parse(data)
 	if len(r.Steps) != 1 {
 		t.Fatalf("expected 1 step, got %d", len(r.Steps))
+	}
+}
+
+func TestStripTemplatesInlineExpressions(t *testing.T) {
+	data := []byte(`
+steps:
+  deploy config:
+    file.managed:
+      - name: /etc/app/config.yaml
+      - user: {{ props "app_user" }}
+      - group: {{ props "app_group" }}
+      - mode: "644"
+`)
+	r := Parse(data)
+	if len(r.Errors) > 0 {
+		t.Fatalf("unexpected parse errors: %v", r.Errors)
+	}
+	if len(r.Steps) != 1 {
+		t.Fatalf("expected 1 step, got %d", len(r.Steps))
+	}
+	if r.Steps[0].ID != "deploy config" {
+		t.Errorf("step ID = %q, want %q", r.Steps[0].ID, "deploy config")
+	}
+}
+
+func TestStripTemplatesBlockDirectives(t *testing.T) {
+	data := []byte(`
+steps:
+  always present:
+    file.exists:
+      - name: /tmp/a
+{{- if (props "enable_feature") }}
+  conditional step:
+    file.managed:
+      - name: /etc/feature.conf
+      - source: grlx://feature.conf
+{{- end }}
+  also always present:
+    file.exists:
+      - name: /tmp/b
+`)
+	r := Parse(data)
+	if len(r.Errors) > 0 {
+		t.Fatalf("unexpected parse errors: %v", r.Errors)
+	}
+	if len(r.Steps) != 3 {
+		t.Fatalf("expected 3 steps, got %d", len(r.Steps))
+	}
+}
+
+func TestStripTemplatesComments(t *testing.T) {
+	data := []byte(`
+{{/* this is a template comment */}}
+steps:
+  my step:
+    file.exists:
+      - name: /tmp/a
+`)
+	r := Parse(data)
+	if len(r.Errors) > 0 {
+		t.Fatalf("unexpected parse errors: %v", r.Errors)
+	}
+	if len(r.Steps) != 1 {
+		t.Fatalf("expected 1 step, got %d", len(r.Steps))
+	}
+}
+
+func TestStripTemplatesInlineInString(t *testing.T) {
+	data := []byte(`
+steps:
+  set hostname:
+    file.content:
+      - name: /etc/motd
+      - text: "Managed by grlx - {{ hostname }}"
+`)
+	r := Parse(data)
+	if len(r.Errors) > 0 {
+		t.Fatalf("unexpected parse errors: %v", r.Errors)
+	}
+	if len(r.Steps) != 1 {
+		t.Fatalf("expected 1 step, got %d", len(r.Steps))
+	}
+}
+
+func TestStripTemplatesPreservesLineNumbers(t *testing.T) {
+	input := "line1\n{{- if true }}\nline3\n{{- end }}\nline5"
+	out := string(StripTemplates([]byte(input)))
+	lines := strings.Split(out, "\n")
+	if len(lines) != 5 {
+		t.Fatalf("expected 5 lines, got %d", len(lines))
+	}
+	if lines[0] != "line1" {
+		t.Errorf("line 0 = %q, want %q", lines[0], "line1")
+	}
+	if lines[1] != "" {
+		t.Errorf("line 1 should be blank, got %q", lines[1])
+	}
+	if lines[2] != "line3" {
+		t.Errorf("line 2 = %q, want %q", lines[2], "line3")
+	}
+	if lines[4] != "line5" {
+		t.Errorf("line 4 = %q, want %q", lines[4], "line5")
 	}
 }

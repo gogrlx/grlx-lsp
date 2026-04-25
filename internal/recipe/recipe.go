@@ -3,6 +3,7 @@
 package recipe
 
 import (
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -55,12 +56,40 @@ type ParseError struct {
 	Col     int
 }
 
-// Parse parses raw YAML bytes into a Recipe.
+// templateBlockRe matches entire lines that are only Go template control flow
+// (if, else, end, range, block, define, with, and comments).
+var templateBlockRe = regexp.MustCompile(`^\s*\{\{-?\s*(?:/\*.*?\*/|(?:if|else|end|range|block|define|with|template)\b).*?-?\}\}\s*$`)
+
+// templateExprRe matches inline Go template expressions like {{ props "key" }}.
+var templateExprRe = regexp.MustCompile(`\{\{-?\s*.*?\s*-?\}\}`)
+
+// StripTemplates pre-processes recipe text so that Go template directives do
+// not break the YAML parser.  Control-flow lines are blanked (preserving line
+// count) and inline expressions are replaced with a placeholder string.
+func StripTemplates(data []byte) []byte {
+	lines := strings.Split(string(data), "\n")
+	for i, line := range lines {
+		if templateBlockRe.MatchString(line) {
+			lines[i] = ""
+			continue
+		}
+		if strings.Contains(line, "{{") {
+			lines[i] = templateExprRe.ReplaceAllString(line, "TMPL")
+		}
+	}
+	return []byte(strings.Join(lines, "\n"))
+}
+
+// Parse parses raw YAML bytes into a Recipe.  Go template directives are
+// stripped before YAML parsing so that {{ }} expressions do not produce
+// spurious errors.
 func Parse(data []byte) *Recipe {
 	r := &Recipe{}
 
+	clean := StripTemplates(data)
+
 	var doc yaml.Node
-	if err := yaml.Unmarshal(data, &doc); err != nil {
+	if err := yaml.Unmarshal(clean, &doc); err != nil {
 		r.Errors = append(r.Errors, ParseError{Message: "invalid YAML: " + err.Error(), Line: 0, Col: 0})
 		return r
 	}

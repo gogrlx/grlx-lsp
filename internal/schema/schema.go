@@ -114,9 +114,12 @@ func cmdIngredient() Ingredient {
 				Description: "Run a shell command",
 				Properties: []Property{
 					{Key: "name", Type: "string", Required: true, Description: "The command to run"},
+					{Key: "args", Type: "string", Required: false, Description: "Arguments to the command"},
 					{Key: "runas", Type: "string", Required: false, Description: "User to run the command as"},
 					{Key: "cwd", Type: "string", Required: false, Description: "Working directory"},
 					{Key: "env", Type: "[]string", Required: false, Description: "Environment variables"},
+					{Key: "path", Type: "string", Required: false, Description: "PATH to use when running the command"},
+					{Key: "timeout", Type: "string", Required: false, Description: "Timeout for the command"},
 					{Key: "shell", Type: "string", Required: false, Description: "Shell to use"},
 					{Key: "creates", Type: "string", Required: false, Description: "Only run if this file does not exist"},
 					{Key: "unless", Type: "string", Required: false, Description: "Only run if this command fails"},
@@ -153,7 +156,7 @@ func fileIngredient() Ingredient {
 			}},
 			{Name: "contains", Description: "Ensure a file contains specific content", Properties: []Property{
 				{Key: "name", Type: "string", Required: true, Description: "Path of the file"},
-				{Key: "source", Type: "string", Required: true, Description: "Source file to check against"},
+				{Key: "source", Type: "string", Required: false, Description: "Source file to check against"},
 				{Key: "source_hash", Type: "string", Required: false},
 				{Key: "source_hashes", Type: "[]string", Required: false},
 				{Key: "sources", Type: "[]string", Required: false},
@@ -218,6 +221,9 @@ func fileIngredient() Ingredient {
 			}},
 			{Name: "touch", Description: "Touch a file (update mtime, create if missing)", Properties: []Property{
 				{Key: "name", Type: "string", Required: true},
+				{Key: "atime", Type: "string", Required: false, Description: "Access time to set"},
+				{Key: "mtime", Type: "string", Required: false, Description: "Modification time to set"},
+				{Key: "makedirs", Type: "bool", Required: false, Description: "Create parent directories if they do not exist"},
 			}},
 		},
 	}
@@ -237,6 +243,8 @@ func groupIngredient() Ingredient {
 			{Name: "present", Description: "Ensure a group is present", Properties: []Property{
 				{Key: "name", Type: "string", Required: true},
 				{Key: "gid", Type: "string", Required: false},
+				{Key: "system", Type: "bool", Required: false, Description: "Create a system group"},
+				{Key: "members", Type: "[]string", Required: false, Description: "List of users to add to the group"},
 			}},
 		},
 	}
@@ -247,33 +255,61 @@ func pkgIngredient() Ingredient {
 		Name:        "pkg",
 		Description: "Manage system packages",
 		Methods: []Method{
-			{Name: "cleaned", Description: "Clean package cache"},
+			{Name: "cleaned", Description: "Clean package cache", Properties: []Property{
+				{Key: "name", Type: "string", Required: true},
+				{Key: "autoremove", Type: "bool", Required: false, Description: "Also remove unused dependencies"},
+			}},
 			{Name: "group_installed", Description: "Install a package group", Properties: []Property{
 				{Key: "name", Type: "string", Required: true},
 			}},
 			{Name: "held", Description: "Hold a package at current version", Properties: []Property{
 				{Key: "name", Type: "string", Required: true},
+				{Key: "pkgs", Type: "[]string", Required: false, Description: "Additional packages to hold"},
 			}},
 			{Name: "installed", Description: "Ensure a package is installed", Properties: []Property{
 				{Key: "name", Type: "string", Required: true},
-				{Key: "version", Type: "string", Required: false},
+				{Key: "version", Type: "string", Required: false, Description: "Package version to install"},
+				{Key: "fromrepo", Type: "string", Required: false, Description: "Repository to install from"},
+				{Key: "pkgs", Type: "[]string", Required: false, Description: "Additional packages to install"},
+				{Key: "refresh", Type: "bool", Required: false, Description: "Refresh the package database before installing"},
+				{Key: "reinstall", Type: "bool", Required: false, Description: "Reinstall even if already installed"},
 			}},
 			{Name: "key_managed", Description: "Manage a package signing key", Properties: []Property{
 				{Key: "name", Type: "string", Required: true},
-				{Key: "source", Type: "string", Required: false},
+				{Key: "absent", Type: "bool", Required: false, Description: "Ensure the key is absent"},
 			}},
 			{Name: "latest", Description: "Ensure a package is at the latest version", Properties: []Property{
 				{Key: "name", Type: "string", Required: true},
+				{Key: "fromrepo", Type: "string", Required: false, Description: "Repository to install from"},
+				{Key: "pkgs", Type: "[]string", Required: false, Description: "Additional packages to upgrade"},
+				{Key: "refresh", Type: "bool", Required: false, Description: "Refresh the package database first"},
 			}},
 			{Name: "purged", Description: "Purge a package (remove with config)", Properties: []Property{
 				{Key: "name", Type: "string", Required: true},
+				{Key: "pkgs", Type: "[]string", Required: false, Description: "Additional packages to purge"},
 			}},
 			{Name: "removed", Description: "Remove a package", Properties: []Property{
 				{Key: "name", Type: "string", Required: true},
+				{Key: "pkgs", Type: "[]string", Required: false, Description: "Additional packages to remove"},
 			}},
 			{Name: "repo_managed", Description: "Manage a package repository", Properties: []Property{
 				{Key: "name", Type: "string", Required: true},
-				{Key: "source", Type: "string", Required: false},
+				{Key: "url", Type: "string", Required: false, Description: "Repository URL"},
+				{Key: "absent", Type: "bool", Required: false, Description: "Ensure the repository is absent"},
+			}},
+			{Name: "unheld", Description: "Unhold a package", Properties: []Property{
+				{Key: "name", Type: "string", Required: true},
+				{Key: "pkgs", Type: "[]string", Required: false, Description: "Additional packages to unhold"},
+			}},
+			{Name: "upgraded", Description: "Upgrade a package", Properties: []Property{
+				{Key: "name", Type: "string", Required: true},
+				{Key: "fromrepo", Type: "string", Required: false, Description: "Repository to upgrade from"},
+				{Key: "pkgs", Type: "[]string", Required: false, Description: "Additional packages to upgrade"},
+				{Key: "refresh", Type: "bool", Required: false, Description: "Refresh the package database first"},
+			}},
+			{Name: "uptodate", Description: "Ensure all packages are up to date", Properties: []Property{
+				{Key: "name", Type: "string", Required: true},
+				{Key: "refresh", Type: "bool", Required: false, Description: "Refresh the package database first"},
 			}},
 		},
 	}
@@ -282,7 +318,7 @@ func pkgIngredient() Ingredient {
 func serviceIngredient() Ingredient {
 	return Ingredient{
 		Name:        "service",
-		Description: "Manage system services",
+		Description: "Manage system services (systemd)",
 		Methods: []Method{
 			{Name: "disabled", Description: "Ensure a service is disabled", Properties: []Property{
 				{Key: "name", Type: "string", Required: true},
@@ -291,6 +327,9 @@ func serviceIngredient() Ingredient {
 				{Key: "name", Type: "string", Required: true},
 			}},
 			{Name: "masked", Description: "Mask a service", Properties: []Property{
+				{Key: "name", Type: "string", Required: true},
+			}},
+			{Name: "reloaded", Description: "Reload a service", Properties: []Property{
 				{Key: "name", Type: "string", Required: true},
 			}},
 			{Name: "restarted", Description: "Restart a service", Properties: []Property{
@@ -317,17 +356,22 @@ func userIngredient() Ingredient {
 		Methods: []Method{
 			{Name: "absent", Description: "Ensure a user is absent", Properties: []Property{
 				{Key: "name", Type: "string", Required: true},
+				{Key: "purge", Type: "bool", Required: false, Description: "Also remove the user's home directory"},
 			}},
 			{Name: "exists", Description: "Check if a user exists", Properties: []Property{
 				{Key: "name", Type: "string", Required: true},
 			}},
 			{Name: "present", Description: "Ensure a user is present", Properties: []Property{
 				{Key: "name", Type: "string", Required: true},
-				{Key: "uid", Type: "string", Required: false},
-				{Key: "gid", Type: "string", Required: false},
-				{Key: "home", Type: "string", Required: false},
-				{Key: "shell", Type: "string", Required: false},
-				{Key: "groups", Type: "[]string", Required: false},
+				{Key: "uid", Type: "string", Required: false, Description: "User ID"},
+				{Key: "gid", Type: "string", Required: false, Description: "Primary group ID"},
+				{Key: "home", Type: "string", Required: false, Description: "Home directory path"},
+				{Key: "shell", Type: "string", Required: false, Description: "Login shell"},
+				{Key: "groups", Type: "[]string", Required: false, Description: "Supplementary groups"},
+				{Key: "comment", Type: "string", Required: false, Description: "GECOS comment field"},
+				{Key: "createhome", Type: "bool", Required: false, Description: "Create the home directory if it does not exist"},
+				{Key: "system", Type: "bool", Required: false, Description: "Create a system user"},
+				{Key: "password_hash", Type: "string", Required: false, Description: "Hashed password for the user"},
 			}},
 		},
 	}

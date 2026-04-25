@@ -20,7 +20,7 @@ func TestDiagnoseUnknownIngredient(t *testing.T) {
       - name: foo`)),
 	}
 
-	diags := h.diagnose(doc)
+	diags := h.diagnose("", doc)
 	found := false
 	for _, d := range diags {
 		if d.Message == "unknown ingredient: bogus" {
@@ -43,7 +43,7 @@ func TestDiagnoseUnknownMethod(t *testing.T) {
 		recipe:  recipe.Parse([]byte(src)),
 	}
 
-	diags := h.diagnose(doc)
+	diags := h.diagnose("", doc)
 	found := false
 	for _, d := range diags {
 		if d.Message == "unknown method: file.nonexistent" {
@@ -67,7 +67,7 @@ func TestDiagnoseMissingRequired(t *testing.T) {
 		recipe:  recipe.Parse([]byte(src)),
 	}
 
-	diags := h.diagnose(doc)
+	diags := h.diagnose("", doc)
 	foundName := false
 	foundSource := false
 	for _, d := range diags {
@@ -98,7 +98,7 @@ func TestDiagnoseUnknownProperty(t *testing.T) {
 		recipe:  recipe.Parse([]byte(src)),
 	}
 
-	diags := h.diagnose(doc)
+	diags := h.diagnose("", doc)
 	found := false
 	for _, d := range diags {
 		if d.Message == "unknown property: bogusprop for file.absent" {
@@ -121,7 +121,7 @@ func TestDiagnoseValidRecipe(t *testing.T) {
 		recipe:  recipe.Parse([]byte(src)),
 	}
 
-	diags := h.diagnose(doc)
+	diags := h.diagnose("", doc)
 	if len(diags) != 0 {
 		t.Errorf("expected no diagnostics for valid recipe, got: %v", diags)
 	}
@@ -143,7 +143,7 @@ func TestDiagnoseUnknownRequisiteType(t *testing.T) {
 		recipe:  recipe.Parse([]byte(src)),
 	}
 
-	diags := h.diagnose(doc)
+	diags := h.diagnose("", doc)
 	found := false
 	for _, d := range diags {
 		if d.Message == "unknown requisite type: bogus_req" {

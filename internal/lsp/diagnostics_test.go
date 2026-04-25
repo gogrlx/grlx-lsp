@@ -13,7 +13,7 @@ import (
 func TestDiagnoseNilRecipe(t *testing.T) {
 	h := NewHandler(schema.DefaultRegistry())
 	doc := &document{content: "", recipe: nil}
-	diags := h.diagnose(doc)
+	diags := h.diagnose("", doc)
 	if len(diags) != 0 {
 		t.Errorf("expected no diagnostics for nil recipe, got %d", len(diags))
 	}
@@ -29,7 +29,7 @@ func TestDiagnoseParseErrors(t *testing.T) {
 		content: src,
 		recipe:  recipe.Parse([]byte(src)),
 	}
-	diags := h.diagnose(doc)
+	diags := h.diagnose("", doc)
 	// Should at least report the unknown ingredient
 	if len(diags) == 0 {
 		t.Error("expected diagnostics for invalid recipe")
@@ -45,7 +45,7 @@ func TestDiagnoseEmptyIngredient(t *testing.T) {
 		},
 	}
 	doc := &document{content: "", recipe: r}
-	diags := h.diagnose(doc)
+	diags := h.diagnose("", doc)
 	if len(diags) != 0 {
 		t.Errorf("expected no diagnostics for empty ingredient, got %d", len(diags))
 	}
@@ -66,7 +66,7 @@ func TestDiagnoseRequisiteUnknownRef(t *testing.T) {
 		content: src,
 		recipe:  recipe.Parse([]byte(src)),
 	}
-	diags := h.diagnose(doc)
+	diags := h.diagnose("", doc)
 	found := false
 	for _, d := range diags {
 		if d.Severity == protocol.DiagnosticSeverityWarning && contains(d.Message, "reference to unknown step") {
@@ -92,7 +92,7 @@ func TestDiagnoseDuplicateStepIDs(t *testing.T) {
 		recipe:  recipe.Parse([]byte(src)),
 	}
 
-	diags := h.diagnose(doc)
+	diags := h.diagnose("", doc)
 	duplicateCount := 0
 	for _, d := range diags {
 		if d.Severity == protocol.DiagnosticSeverityError && d.Message == "duplicate step ID: duplicate" {

@@ -39,7 +39,7 @@ func (h *Handler) handleCompletion(_ context.Context, reply jsonrpc2.Replier, re
 	case isInRequisites(line):
 		items = h.completeRequisiteTypes(prefix)
 	case isInRequisiteValue(doc.content, int(params.Position.Line)):
-		items = h.completeStepIDs(doc)
+		items = h.completeStepIDs(string(params.TextDocument.URI), doc)
 	case isPropertyPosition(line):
 		items = h.completeProperties(doc, int(params.Position.Line))
 	default:
@@ -166,7 +166,7 @@ func (h *Handler) completeRequisiteTypes(_ string) []protocol.CompletionItem {
 	return items
 }
 
-func (h *Handler) completeStepIDs(doc *document) []protocol.CompletionItem {
+func (h *Handler) completeStepIDs(uri string, doc *document) []protocol.CompletionItem {
 	var items []protocol.CompletionItem
 	if doc.recipe == nil {
 		return items
@@ -175,6 +175,13 @@ func (h *Handler) completeStepIDs(doc *document) []protocol.CompletionItem {
 		items = append(items, protocol.CompletionItem{
 			Label: id,
 			Kind:  protocol.CompletionItemKindReference,
+		})
+	}
+	for _, id := range h.collectIncludedStepIDs(uri, doc) {
+		items = append(items, protocol.CompletionItem{
+			Label:  id,
+			Kind:   protocol.CompletionItemKindReference,
+			Detail: "(included)",
 		})
 	}
 	return items
