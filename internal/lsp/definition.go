@@ -22,17 +22,11 @@ func (h *Handler) handleDefinition(_ context.Context, reply jsonrpc2.Replier, re
 		return reply(ctx, nil, nil)
 	}
 
-	line := lineAt(doc.content, int(params.Position.Line))
 	col := int(params.Position.Character)
 
-	// Only provide definition inside requisite value positions
-	if !isInRequisiteValue(doc.content, int(params.Position.Line)) {
-		return reply(ctx, nil, nil)
-	}
-
-	// Extract the step ID reference under the cursor
-	ref := stepRefAtPosition(line, col)
-	if ref == "" {
+	// Only provide definition inside requisite value positions.
+	ref, ok := requisiteValueAtPosition(doc.content, int(params.Position.Line), col)
+	if !ok || ref == "" {
 		return reply(ctx, nil, nil)
 	}
 

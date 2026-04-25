@@ -224,20 +224,76 @@ func isInRequisites(line string) bool {
 }
 
 func isInRequisiteValue(content string, line int) bool {
+	_, ok := requisiteValueAtPosition(content, line, len(lineAt(content, line)))
+	return ok
+}
+
+func requisiteValueAtPosition(content string, line, col int) (string, bool) {
 	lines := strings.Split(content, "\n")
-	// Look backwards for a requisite condition key
-	for i := line; i >= 0 && i >= line-5; i-- {
+	if line < 0 || line >= len(lines) {
+		return "", false
+	}
+
+	currentLine := lines[line]
+	currentTrimmed := strings.TrimSpace(currentLine)
+	currentIndent := indentation(currentLine)
+
+	for i := line; i >= 0 && i >= line-8; i-- {
 		trimmed := strings.TrimSpace(lines[i])
-		if strings.HasPrefix(trimmed, "- require:") ||
-			strings.HasPrefix(trimmed, "- require_any:") ||
-			strings.HasPrefix(trimmed, "- onchanges:") ||
-			strings.HasPrefix(trimmed, "- onchanges_any:") ||
-			strings.HasPrefix(trimmed, "- onfail:") ||
-			strings.HasPrefix(trimmed, "- onfail_any:") {
-			return true
+		prefix, ok := requisitePrefix(trimmed)
+		if !ok {
+			continue
+		}
+
+		conditionIndent := indentation(lines[i])
+		if i == line {
+			ref := strings.TrimSpace(trimmed[len(prefix):])
+			if ref == "" {
+				return "", false
+			}
+			valueStart := conditionIndent + len(prefix)
+			if col < valueStart {
+				return "", false
+			}
+			return ref, true
+		}
+
+		if currentTrimmed == "" || currentIndent <= conditionIndent || !strings.HasPrefix(currentTrimmed, "- ") {
+			return "", false
+		}
+
+		ref := strings.TrimSpace(strings.TrimPrefix(currentTrimmed, "- "))
+		if ref == "" {
+			return "", false
+		}
+		valueStart := currentIndent + 2
+		if col < valueStart {
+			return "", false
+		}
+		return ref, true
+	}
+
+	return "", false
+}
+
+func requisitePrefix(trimmed string) (string, bool) {
+	for _, prefix := range []string{
+		"- require: ", "- require_any: ",
+		"- onchanges: ", "- onchanges_any: ",
+		"- onfail: ", "- onfail_any: ",
+		"- require:", "- require_any:",
+		"- onchanges:", "- onchanges_any:",
+		"- onfail:", "- onfail_any:",
+	} {
+		if strings.HasPrefix(trimmed, prefix) {
+			return prefix, true
 		}
 	}
-	return false
+	return "", false
+}
+
+func indentation(line string) int {
+	return len(line) - len(strings.TrimLeft(line, " \t"))
 }
 
 func isPropertyPosition(line string) bool {

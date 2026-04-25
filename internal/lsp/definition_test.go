@@ -52,3 +52,21 @@ func TestStepRefAtPosition(t *testing.T) {
 		})
 	}
 }
+
+func TestRequisiteValueAtPositionSequenceItem(t *testing.T) {
+	content := `steps:
+  first:
+    file.exists:
+      - name: /tmp/a
+  second:
+    file.exists:
+      - name: /tmp/b
+      - requisites:
+        - require:
+          - first`
+
+	got, ok := requisiteValueAtPosition(content, 9, 12)
+	if !ok || got != "first" {
+		t.Fatalf("requisiteValueAtPosition() = %q, %v, want %q, true", got, ok, "first")
+	}
+}
