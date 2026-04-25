@@ -19,17 +19,12 @@ func TestBuildMethodMarkdown(t *testing.T) {
 
 	md := buildMethodMarkdown("file", m)
 
-	// Should contain header
 	if !contains(md, "### file.managed") {
 		t.Error("expected markdown header with ingredient.method")
 	}
-
-	// Should contain description
 	if !contains(md, "Download and manage a file") {
 		t.Error("expected description in markdown")
 	}
-
-	// Should contain properties table
 	if !contains(md, "| Property |") {
 		t.Error("expected properties table")
 	}
@@ -39,8 +34,6 @@ func TestBuildMethodMarkdown(t *testing.T) {
 	if !contains(md, "| `source` |") {
 		t.Error("expected source property in table")
 	}
-
-	// Required properties should show "yes"
 	if !contains(md, "| yes |") {
 		t.Error("expected 'yes' for required properties")
 	}
@@ -56,7 +49,6 @@ func TestBuildMethodMarkdownNoProperties(t *testing.T) {
 	if !contains(md, "### pkg.cleaned") {
 		t.Error("expected header")
 	}
-	// Should not contain a table
 	if contains(md, "| Property |") {
 		t.Error("should not have property table for method with no properties")
 	}
@@ -76,6 +68,70 @@ func TestBuildMethodMarkdownNoDescription(t *testing.T) {
 	}
 	if !contains(md, "| `name` |") {
 		t.Error("expected name property")
+	}
+}
+
+func TestBuildPropertyMarkdown(t *testing.T) {
+	md := buildPropertyMarkdown("file", "managed", schema.Property{
+		Key:         "source",
+		Type:        "string",
+		Required:    true,
+		Description: "Source URL",
+	})
+
+	if !contains(md, "### `source`") {
+		t.Error("expected property header")
+	}
+	if !contains(md, "Used by `file.managed`") {
+		t.Error("expected owning method")
+	}
+	if !contains(md, "- Type: `string`") {
+		t.Error("expected property type")
+	}
+	if !contains(md, "- Required: yes") {
+		t.Error("expected required marker")
+	}
+	if !contains(md, "Source URL") {
+		t.Error("expected property description")
+	}
+}
+
+func TestFindPropertyHover(t *testing.T) {
+	h := NewHandler(schema.DefaultRegistry())
+	src := `steps:
+  manage config:
+    file.managed:
+      - name: /etc/example.conf
+      - source: salt://example.conf
+`
+	h.updateDocument("file:///test.grlx", src)
+	doc := h.getDocument("file:///test.grlx")
+
+	match := h.findPropertyHover(doc, 4, "source")
+	if match == nil {
+		t.Fatal("expected property hover match")
+	}
+	if match.Ingredient != "file" || match.Method != "managed" {
+		t.Fatalf("unexpected match owner: %#v", match)
+	}
+	if match.Property.Key != "source" {
+		t.Fatalf("unexpected property match: %#v", match)
+	}
+}
+
+func TestFindPropertyHoverIgnoresUnknownLine(t *testing.T) {
+	h := NewHandler(schema.DefaultRegistry())
+	src := `steps:
+  manage config:
+    file.managed:
+      - name: /etc/example.conf
+`
+	h.updateDocument("file:///test.grlx", src)
+	doc := h.getDocument("file:///test.grlx")
+
+	match := h.findPropertyHover(doc, 1, "manage")
+	if match != nil {
+		t.Fatalf("expected no property hover match, got %#v", match)
 	}
 }
 
@@ -113,9 +169,9 @@ func TestWordAtPositionEdgeCases(t *testing.T) {
 		want string
 	}{
 		{"", 0, ""},
-		{"hello", 100, "hello"},                // col beyond line length
-		{"  file.managed:", 2, "file.managed"}, // col 2 is start of word
-		{"file.managed:", 12, "file.managed"},  // just before colon
+		{"hello", 100, "hello"},
+		{"  file.managed:", 2, "file.managed"},
+		{"file.managed:", 12, "file.managed"},
 		{"a", 0, "a"},
 		{"a", 1, "a"},
 	}
