@@ -1,3 +1,4 @@
 /grlx-lsp
 dist/
 target/
+.crush
