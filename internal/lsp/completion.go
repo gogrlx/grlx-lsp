@@ -36,7 +36,7 @@ func (h *Handler) handleCompletion(_ context.Context, reply jsonrpc2.Replier, re
 	switch {
 	case isTopLevel(doc.content, int(params.Position.Line)):
 		items = h.completeTopLevel(prefix)
-	case isInRequisites(line):
+	case isInRequisites(doc.content, int(params.Position.Line)):
 		items = h.completeRequisiteTypes(prefix)
 	case isInRequisiteValue(doc.content, int(params.Position.Line)):
 		items = h.completeStepIDs(doc)
@@ -215,12 +215,36 @@ func isTopLevel(content string, line int) bool {
 	return len(l) == 0 || (len(strings.TrimLeft(l, " \t")) == len(l))
 }
 
-func isInRequisites(line string) bool {
-	trimmed := strings.TrimSpace(line)
-	// Inside a requisites block: indented under "- requisites:"
-	return strings.HasPrefix(trimmed, "- require") ||
+func isInRequisites(content string, line int) bool {
+	lines := strings.Split(content, "\n")
+	if line < 0 || line >= len(lines) {
+		return false
+	}
+
+	trimmed := strings.TrimSpace(lines[line])
+	if isStepBoundary(trimmed) {
+		return false
+	}
+	if strings.HasPrefix(trimmed, "- require") ||
 		strings.HasPrefix(trimmed, "- onchanges") ||
-		strings.HasPrefix(trimmed, "- onfail")
+		strings.HasPrefix(trimmed, "- onfail") {
+		return true
+	}
+
+	for i := line - 1; i >= 0; i-- {
+		prevTrimmed := strings.TrimSpace(lines[i])
+		if prevTrimmed == "" {
+			continue
+		}
+		if prevTrimmed == "- requisites:" {
+			return true
+		}
+		if isStepBoundary(prevTrimmed) {
+			return false
+		}
+	}
+
+	return false
 }
 
 func isInRequisiteValue(content string, line int) bool {
@@ -233,6 +257,9 @@ func requisiteValueAtPosition(content string, line, col int) (string, bool) {
 	if line < 0 || line >= len(lines) {
 		return "", false
 	}
+	if isStepBoundary(strings.TrimSpace(lines[line])) {
+		return "", false
+	}
 
 	currentLine := lines[line]
 	currentTrimmed := strings.TrimSpace(currentLine)
@@ -242,6 +269,9 @@ func requisiteValueAtPosition(content string, line, col int) (string, bool) {
 		trimmed := strings.TrimSpace(lines[i])
 		prefix, ok := requisitePrefix(trimmed)
 		if !ok {
+			if i != line && isStepBoundary(trimmed) {
+				return "", false
+			}
 			continue
 		}
 
@@ -299,8 +329,14 @@ func indentation(line string) int {
 func isPropertyPosition(line string) bool {
 	trimmed := strings.TrimSpace(line)
 	// Property lines start with "- " and are indented
-	indent := len(line) - len(strings.TrimLeft(line, " "))
+	indent := indentation(line)
 	return indent >= 4 && (strings.HasPrefix(trimmed, "- ") || trimmed == "-" || trimmed == "")
+}
+
+func isStepBoundary(line string) bool {
+	return strings.HasSuffix(line, ":") &&
+		!strings.HasPrefix(line, "- ") &&
+		!strings.Contains(line, ".")
 }
 
 func (h *Handler) findStepForLine(doc *document, line int) *struct {
