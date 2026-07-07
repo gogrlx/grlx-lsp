@@ -175,22 +175,36 @@ func (r *Recipe) parseStep(idNode, bodyNode *yaml.Node) {
 	}
 
 	// The value should be a sequence of mappings (property list)
-	if methodValNode.Kind == yaml.SequenceNode {
-		for _, item := range methodValNode.Content {
-			if item.Kind == yaml.MappingNode {
-				for j := 0; j+1 < len(item.Content); j += 2 {
-					k := item.Content[j]
-					v := item.Content[j+1]
-					if k.Value == "requisites" {
-						step.Requisites = parseRequisites(v)
-					} else {
-						step.Properties = append(step.Properties, PropertyEntry{
-							Key:       k.Value,
-							KeyNode:   k,
-							ValueNode: v,
-						})
-					}
-				}
+	if methodValNode.Kind != yaml.SequenceNode {
+		r.Errors = append(r.Errors, ParseError{
+			Message: "step properties must be a list",
+			Line:    methodValNode.Line,
+			Col:     methodValNode.Column,
+		})
+		r.Steps = append(r.Steps, step)
+		return
+	}
+
+	for _, item := range methodValNode.Content {
+		if item.Kind != yaml.MappingNode {
+			r.Errors = append(r.Errors, ParseError{
+				Message: "step property entries must be mappings",
+				Line:    item.Line,
+				Col:     item.Column,
+			})
+			continue
+		}
+		for j := 0; j+1 < len(item.Content); j += 2 {
+			k := item.Content[j]
+			v := item.Content[j+1]
+			if k.Value == "requisites" {
+				step.Requisites = parseRequisites(v)
+			} else {
+				step.Properties = append(step.Properties, PropertyEntry{
+					Key:       k.Value,
+					KeyNode:   k,
+					ValueNode: v,
+				})
 			}
 		}
 	}

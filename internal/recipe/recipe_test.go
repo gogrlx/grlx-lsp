@@ -127,6 +127,55 @@ steps:
 	}
 }
 
+func TestParseStepPropertiesMustBeList(t *testing.T) {
+	data := []byte(`
+steps:
+  bad step:
+    pkg.installed: nginx
+`)
+	r := Parse(data)
+
+	found := false
+	for _, e := range r.Errors {
+		if e.Message == "step properties must be a list" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected error about non-list step properties, got: %v", r.Errors)
+	}
+	if len(r.Steps) != 1 {
+		t.Fatalf("expected step to remain available for diagnostics, got %d parsed steps", len(r.Steps))
+	}
+}
+
+func TestParseStepPropertyEntriesMustBeMappings(t *testing.T) {
+	data := []byte(`
+steps:
+  bad step:
+    pkg.installed:
+      - name: nginx
+      - invalid
+`)
+	r := Parse(data)
+
+	found := false
+	for _, e := range r.Errors {
+		if e.Message == "step property entries must be mappings" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected error about non-mapping property entry, got: %v", r.Errors)
+	}
+	if len(r.Steps) != 1 {
+		t.Fatalf("expected step to remain available for diagnostics, got %d parsed steps", len(r.Steps))
+	}
+	if len(r.Steps[0].Properties) != 1 || r.Steps[0].Properties[0].Key != "name" {
+		t.Fatalf("expected valid properties to still parse, got: %v", r.Steps[0].Properties)
+	}
+}
+
 func TestStepIDs(t *testing.T) {
 	data := []byte(`
 steps:
