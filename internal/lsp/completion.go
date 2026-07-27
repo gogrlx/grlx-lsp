@@ -36,7 +36,7 @@ func (h *Handler) handleCompletion(_ context.Context, reply jsonrpc2.Replier, re
 	switch {
 	case isTopLevel(doc.content, int(params.Position.Line)):
 		items = h.completeTopLevel(prefix)
-	case isInRequisites(line):
+	case isInRequisites(doc.content, int(params.Position.Line)):
 		items = h.completeRequisiteTypes(prefix)
 	case isInRequisiteValue(doc.content, int(params.Position.Line)):
 		items = h.completeStepIDs(doc)
@@ -215,12 +215,42 @@ func isTopLevel(content string, line int) bool {
 	return len(l) == 0 || (len(strings.TrimLeft(l, " \t")) == len(l))
 }
 
-func isInRequisites(line string) bool {
-	trimmed := strings.TrimSpace(line)
-	// Inside a requisites block: indented under "- requisites:"
-	return strings.HasPrefix(trimmed, "- require") ||
+func isInRequisites(content string, line int) bool {
+	lines := strings.Split(content, "\n")
+	if line < 0 || line >= len(lines) {
+		return false
+	}
+
+	trimmed := strings.TrimSpace(lines[line])
+	if isStepBoundary(lines, line) {
+		return false
+	}
+	if strings.HasPrefix(trimmed, "- require") ||
 		strings.HasPrefix(trimmed, "- onchanges") ||
-		strings.HasPrefix(trimmed, "- onfail")
+		strings.HasPrefix(trimmed, "- onfail") {
+		return true
+	}
+
+	blankIndent := indentation(lines[line])
+	for i := line - 1; i >= 0; i-- {
+		prevTrimmed := strings.TrimSpace(lines[i])
+		if prevTrimmed == "" {
+			continue
+		}
+		if prevTrimmed == "- requisites:" {
+			return true
+		}
+		// A requisite condition opening a value list (e.g. "- require:") at a
+		// shallower indent means this item is a requisite value, not a type.
+		if _, ok := requisitePrefix(prevTrimmed); ok && indentation(lines[i]) < blankIndent {
+			return false
+		}
+		if isStepBoundary(lines, i) {
+			return false
+		}
+	}
+
+	return false
 }
 
 func isInRequisiteValue(content string, line int) bool {
@@ -233,6 +263,9 @@ func requisiteValueAtPosition(content string, line, col int) (string, bool) {
 	if line < 0 || line >= len(lines) {
 		return "", false
 	}
+	if isStepBoundary(lines, line) {
+		return "", false
+	}
 
 	currentLine := lines[line]
 	currentTrimmed := strings.TrimSpace(currentLine)
@@ -242,6 +275,9 @@ func requisiteValueAtPosition(content string, line, col int) (string, bool) {
 		trimmed := strings.TrimSpace(lines[i])
 		prefix, ok := requisitePrefix(trimmed)
 		if !ok {
+			if i != line && isStepBoundary(lines, i) {
+				return "", false
+			}
 			continue
 		}
 
@@ -299,8 +335,31 @@ func indentation(line string) int {
 func isPropertyPosition(line string) bool {
 	trimmed := strings.TrimSpace(line)
 	// Property lines start with "- " and are indented
-	indent := len(line) - len(strings.TrimLeft(line, " "))
+	indent := indentation(line)
 	return indent >= 4 && (strings.HasPrefix(trimmed, "- ") || trimmed == "-" || trimmed == "")
+}
+
+// isStepBoundary reports whether lines[i] is a step-name key line. A step
+// name's value is a mapping (its method line, another key), whereas a method
+// line's value is the property sequence ("- " items). We distinguish them by
+// peeking at the next non-blank line rather than by looking for a ".", so step
+// IDs that contain dots (paths, versioned package names) are handled correctly.
+func isStepBoundary(lines []string, i int) bool {
+	if i < 0 || i >= len(lines) {
+		return false
+	}
+	trimmed := strings.TrimSpace(lines[i])
+	if trimmed == "" || strings.HasPrefix(trimmed, "- ") || !strings.HasSuffix(trimmed, ":") {
+		return false
+	}
+	for j := i + 1; j < len(lines); j++ {
+		next := strings.TrimSpace(lines[j])
+		if next == "" {
+			continue
+		}
+		return !strings.HasPrefix(next, "- ")
+	}
+	return true
 }
 
 func (h *Handler) findStepForLine(doc *document, line int) *struct {

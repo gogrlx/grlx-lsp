@@ -174,21 +174,66 @@ func TestIsTopLevel(t *testing.T) {
 }
 
 func TestIsInRequisites(t *testing.T) {
+	content := `steps:
+  first:
+    file.exists:
+      - name: /tmp/a
+      - requisites:
+        - require: step1
+        -
+  second:
+    file.exists:
+      - name: /tmp/b`
+
 	tests := []struct {
-		line string
+		name string
+		line int
 		want bool
 	}{
-		{"      - require: step1", true},
-		{"      - onchanges: step1", true},
-		{"      - onfail: step1", true},
-		{"      - name: foo", false},
-		{"steps:", false},
+		{"condition line", 5, true},
+		{"blank item inside requisites block", 6, true},
+		{"normal property", 3, false},
+		{"next step", 7, false},
 	}
 	for _, tt := range tests {
-		got := isInRequisites(tt.line)
-		if got != tt.want {
-			t.Errorf("isInRequisites(%q) = %v, want %v", tt.line, got, tt.want)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			got := isInRequisites(content, tt.line)
+			if got != tt.want {
+				t.Errorf("isInRequisites(line=%d) = %v, want %v", tt.line, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsInRequisitesDottedStepName(t *testing.T) {
+	// A step ID containing a dot must still act as a boundary so requisite
+	// context does not leak into the next step.
+	content := `steps:
+  first:
+    file.exists:
+      - requisites:
+        - require: step1
+  /etc/nginx.conf:
+    file.managed:
+      - name: y`
+
+	if isInRequisites(content, 7) {
+		t.Error("line 7 (property of dotted-name next step) should not be requisite context")
+	}
+}
+
+func TestIsInRequisitesNestedValueBlankItem(t *testing.T) {
+	// A blank item nested under "- require:" is a requisite value, not a type.
+	content := `steps:
+  first:
+    file.exists:
+      - requisites:
+        - require:
+          - step1
+          -`
+
+	if isInRequisites(content, 6) {
+		t.Error("blank item under a require value list should not be requisite-type context")
 	}
 }
 
@@ -199,10 +244,16 @@ func TestIsInRequisiteValue(t *testing.T) {
       - name: /tmp/a
       - requisites:
         - require:
-          - first`
+          - first
+  second:
+    file.exists:
+      - name: /tmp/b`
 
 	if !isInRequisiteValue(content, 6) {
 		t.Error("line 6 should be in requisite value context")
+	}
+	if isInRequisiteValue(content, 7) {
+		t.Error("line 7 should not inherit requisite value context into the next step")
 	}
 	if isInRequisiteValue(content, 0) {
 		t.Error("line 0 should not be in requisite value context")
@@ -234,6 +285,28 @@ func TestRequisiteValueAtPosition(t *testing.T) {
 
 	if _, ok = requisiteValueAtPosition(content, 9, 10); ok {
 		t.Fatal("condition line without value should not count as requisite value")
+	}
+}
+
+func TestHandleCompletionPrefersRequisiteTypesForBlankRequisiteItems(t *testing.T) {
+	h := NewHandler(schema.DefaultRegistry())
+	src := `steps:
+  install nginx:
+    pkg.installed:
+      - name: nginx
+      - requisites:
+        - `
+	h.updateDocument("file:///test.grlx", src)
+	doc := h.getDocument("file:///test.grlx")
+
+	line := 5
+	if !isInRequisites(doc.content, line) {
+		t.Fatal("expected blank requisite item to be treated as requisite-type context")
+	}
+
+	items := h.completeRequisiteTypes("")
+	if len(items) == 0 || items[0].Kind != protocol.CompletionItemKindEnum {
+		t.Fatal("expected requisite type completions for blank requisite item")
 	}
 }
 
