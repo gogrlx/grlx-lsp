@@ -205,6 +205,38 @@ func TestIsInRequisites(t *testing.T) {
 	}
 }
 
+func TestIsInRequisitesDottedStepName(t *testing.T) {
+	// A step ID containing a dot must still act as a boundary so requisite
+	// context does not leak into the next step.
+	content := `steps:
+  first:
+    file.exists:
+      - requisites:
+        - require: step1
+  /etc/nginx.conf:
+    file.managed:
+      - name: y`
+
+	if isInRequisites(content, 7) {
+		t.Error("line 7 (property of dotted-name next step) should not be requisite context")
+	}
+}
+
+func TestIsInRequisitesNestedValueBlankItem(t *testing.T) {
+	// A blank item nested under "- require:" is a requisite value, not a type.
+	content := `steps:
+  first:
+    file.exists:
+      - requisites:
+        - require:
+          - step1
+          -`
+
+	if isInRequisites(content, 6) {
+		t.Error("blank item under a require value list should not be requisite-type context")
+	}
+}
+
 func TestIsInRequisiteValue(t *testing.T) {
 	content := `steps:
   first:

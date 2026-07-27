@@ -222,7 +222,7 @@ func isInRequisites(content string, line int) bool {
 	}
 
 	trimmed := strings.TrimSpace(lines[line])
-	if isStepBoundary(trimmed) {
+	if isStepBoundary(lines, line) {
 		return false
 	}
 	if strings.HasPrefix(trimmed, "- require") ||
@@ -231,6 +231,7 @@ func isInRequisites(content string, line int) bool {
 		return true
 	}
 
+	blankIndent := indentation(lines[line])
 	for i := line - 1; i >= 0; i-- {
 		prevTrimmed := strings.TrimSpace(lines[i])
 		if prevTrimmed == "" {
@@ -239,7 +240,12 @@ func isInRequisites(content string, line int) bool {
 		if prevTrimmed == "- requisites:" {
 			return true
 		}
-		if isStepBoundary(prevTrimmed) {
+		// A requisite condition opening a value list (e.g. "- require:") at a
+		// shallower indent means this item is a requisite value, not a type.
+		if _, ok := requisitePrefix(prevTrimmed); ok && indentation(lines[i]) < blankIndent {
+			return false
+		}
+		if isStepBoundary(lines, i) {
 			return false
 		}
 	}
@@ -257,7 +263,7 @@ func requisiteValueAtPosition(content string, line, col int) (string, bool) {
 	if line < 0 || line >= len(lines) {
 		return "", false
 	}
-	if isStepBoundary(strings.TrimSpace(lines[line])) {
+	if isStepBoundary(lines, line) {
 		return "", false
 	}
 
@@ -269,7 +275,7 @@ func requisiteValueAtPosition(content string, line, col int) (string, bool) {
 		trimmed := strings.TrimSpace(lines[i])
 		prefix, ok := requisitePrefix(trimmed)
 		if !ok {
-			if i != line && isStepBoundary(trimmed) {
+			if i != line && isStepBoundary(lines, i) {
 				return "", false
 			}
 			continue
@@ -333,10 +339,27 @@ func isPropertyPosition(line string) bool {
 	return indent >= 4 && (strings.HasPrefix(trimmed, "- ") || trimmed == "-" || trimmed == "")
 }
 
-func isStepBoundary(line string) bool {
-	return strings.HasSuffix(line, ":") &&
-		!strings.HasPrefix(line, "- ") &&
-		!strings.Contains(line, ".")
+// isStepBoundary reports whether lines[i] is a step-name key line. A step
+// name's value is a mapping (its method line, another key), whereas a method
+// line's value is the property sequence ("- " items). We distinguish them by
+// peeking at the next non-blank line rather than by looking for a ".", so step
+// IDs that contain dots (paths, versioned package names) are handled correctly.
+func isStepBoundary(lines []string, i int) bool {
+	if i < 0 || i >= len(lines) {
+		return false
+	}
+	trimmed := strings.TrimSpace(lines[i])
+	if trimmed == "" || strings.HasPrefix(trimmed, "- ") || !strings.HasSuffix(trimmed, ":") {
+		return false
+	}
+	for j := i + 1; j < len(lines); j++ {
+		next := strings.TrimSpace(lines[j])
+		if next == "" {
+			continue
+		}
+		return !strings.HasPrefix(next, "- ")
+	}
+	return true
 }
 
 func (h *Handler) findStepForLine(doc *document, line int) *struct {
