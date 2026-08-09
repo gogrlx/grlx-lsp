@@ -23,7 +23,7 @@ func TestDiagnoseUnknownIngredient(t *testing.T) {
 	diags := h.diagnose(doc)
 	found := false
 	for _, d := range diags {
-		if d.Message == "unknown ingredient: bogus" {
+		if diagnosticText(d.Message) == "unknown ingredient: bogus" {
 			found = true
 		}
 	}
@@ -46,7 +46,7 @@ func TestDiagnoseUnknownMethod(t *testing.T) {
 	diags := h.diagnose(doc)
 	found := false
 	for _, d := range diags {
-		if d.Message == "unknown method: file.nonexistent" {
+		if diagnosticText(d.Message) == "unknown method: file.nonexistent" {
 			found = true
 		}
 	}
@@ -71,10 +71,10 @@ func TestDiagnoseMissingRequired(t *testing.T) {
 	foundName := false
 	foundSource := false
 	for _, d := range diags {
-		if d.Message == "missing required property: name" {
+		if diagnosticText(d.Message) == "missing required property: name" {
 			foundName = true
 		}
-		if d.Message == "missing required property: source" {
+		if diagnosticText(d.Message) == "missing required property: source" {
 			foundSource = true
 		}
 	}
@@ -101,7 +101,7 @@ func TestDiagnoseUnknownProperty(t *testing.T) {
 	diags := h.diagnose(doc)
 	found := false
 	for _, d := range diags {
-		if d.Message == "unknown property: bogusprop for file.absent" {
+		if diagnosticText(d.Message) == "unknown property: bogusprop for file.absent" {
 			found = true
 		}
 	}
@@ -146,7 +146,7 @@ func TestDiagnoseUnknownRequisiteType(t *testing.T) {
 	diags := h.diagnose(doc)
 	found := false
 	for _, d := range diags {
-		if d.Message == "unknown requisite type: bogus_req" {
+		if diagnosticText(d.Message) == "unknown requisite type: bogus_req" {
 			found = true
 		}
 	}

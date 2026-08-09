@@ -11,17 +11,15 @@ import (
 	"github.com/gogrlx/grlx-lsp/internal/schema"
 )
 
-func (h *Handler) handleHover(_ context.Context, reply jsonrpc2.Replier, req jsonrpc2.Request) error {
-	ctx := context.Background()
-
+func (h *Handler) handleHover(_ context.Context, req *jsonrpc2.Request) (any, error) {
 	var params protocol.HoverParams
 	if err := json.Unmarshal(req.Params(), &params); err != nil {
-		return reply(ctx, nil, err)
+		return nil, err
 	}
 
 	doc := h.getDocument(string(params.TextDocument.URI))
 	if doc == nil {
-		return reply(ctx, nil, nil)
+		return nil, nil
 	}
 
 	lineNumber := int(params.Position.Line)
@@ -29,16 +27,13 @@ func (h *Handler) handleHover(_ context.Context, reply jsonrpc2.Replier, req jso
 	word := wordAtPosition(line, int(params.Position.Character))
 
 	if word == "" {
-		return reply(ctx, nil, nil)
+		return nil, nil
 	}
 
 	if prop := h.findPropertyHover(doc, lineNumber, word); prop != nil {
-		return reply(ctx, &protocol.Hover{
-			Contents: protocol.MarkupContent{
-				Kind:  protocol.Markdown,
-				Value: buildPropertyMarkdown(prop.Ingredient, prop.Method, prop.Property),
-			},
-		}, nil)
+		return &protocol.Hover{
+			Contents: markdownContent(buildPropertyMarkdown(prop.Ingredient, prop.Method, prop.Property)),
+		}, nil
 	}
 
 	if strings.Contains(word, ".") {
@@ -47,12 +42,9 @@ func (h *Handler) handleHover(_ context.Context, reply jsonrpc2.Replier, req jso
 			m := h.registry.FindMethod(parts[0], parts[1])
 			ing := h.registry.FindIngredient(parts[0])
 			if m != nil && ing != nil {
-				return reply(ctx, &protocol.Hover{
-					Contents: protocol.MarkupContent{
-						Kind:  protocol.Markdown,
-						Value: buildMethodMarkdown(ing.Name, m),
-					},
-				}, nil)
+				return &protocol.Hover{
+					Contents: markdownContent(buildMethodMarkdown(ing.Name, m)),
+				}, nil
 			}
 		}
 	}
@@ -63,26 +55,27 @@ func (h *Handler) handleHover(_ context.Context, reply jsonrpc2.Replier, req jso
 		for _, m := range ing.Methods {
 			methods = append(methods, ing.Name+"."+m.Name)
 		}
-		return reply(ctx, &protocol.Hover{
-			Contents: protocol.MarkupContent{
-				Kind:  protocol.Markdown,
-				Value: "**" + ing.Name + "** — " + ing.Description + "\n\nMethods: `" + strings.Join(methods, "`, `") + "`",
-			},
-		}, nil)
+		return &protocol.Hover{
+			Contents: markdownContent("**" + ing.Name + "** — " + ing.Description + "\n\nMethods: `" + strings.Join(methods, "`, `") + "`"),
+		}, nil
 	}
 
 	for _, rt := range h.registry.RequisiteTypes {
 		if rt.Name == word {
-			return reply(ctx, &protocol.Hover{
-				Contents: protocol.MarkupContent{
-					Kind:  protocol.Markdown,
-					Value: "**" + rt.Name + "** — " + rt.Description,
-				},
-			}, nil)
+			return &protocol.Hover{
+				Contents: markdownContent("**" + rt.Name + "** — " + rt.Description),
+			}, nil
 		}
 	}
 
-	return reply(ctx, nil, nil)
+	return nil, nil
+}
+
+func markdownContent(value string) *protocol.MarkupContent {
+	return &protocol.MarkupContent{
+		Kind:  protocol.MarkupKindMarkdown,
+		Value: value,
+	}
 }
 
 type propertyHoverMatch struct {

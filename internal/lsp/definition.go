@@ -9,17 +9,15 @@ import (
 	"go.lsp.dev/protocol"
 )
 
-func (h *Handler) handleDefinition(_ context.Context, reply jsonrpc2.Replier, req jsonrpc2.Request) error {
-	ctx := context.Background()
-
+func (h *Handler) handleDefinition(_ context.Context, req *jsonrpc2.Request) (any, error) {
 	var params protocol.DefinitionParams
 	if err := json.Unmarshal(req.Params(), &params); err != nil {
-		return reply(ctx, nil, err)
+		return nil, err
 	}
 
 	doc := h.getDocument(string(params.TextDocument.URI))
 	if doc == nil || doc.recipe == nil {
-		return reply(ctx, nil, nil)
+		return nil, nil
 	}
 
 	col := int(params.Position.Character)
@@ -27,7 +25,7 @@ func (h *Handler) handleDefinition(_ context.Context, reply jsonrpc2.Replier, re
 	// Only provide definition inside requisite value positions.
 	ref, ok := requisiteValueAtPosition(doc.content, int(params.Position.Line), col)
 	if !ok || ref == "" {
-		return reply(ctx, nil, nil)
+		return nil, nil
 	}
 
 	// Find the step definition
@@ -46,11 +44,11 @@ func (h *Handler) handleDefinition(_ context.Context, reply jsonrpc2.Replier, re
 					},
 				},
 			}
-			return reply(ctx, loc, nil)
+			return loc, nil
 		}
 	}
 
-	return reply(ctx, nil, nil)
+	return nil, nil
 }
 
 // stepRefAtPosition extracts a step ID reference from a requisite value line.

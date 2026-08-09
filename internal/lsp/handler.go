@@ -41,88 +41,101 @@ func (h *Handler) SetConn(conn jsonrpc2.Conn) {
 }
 
 // Handle dispatches LSP requests.
-func (h *Handler) Handle(ctx context.Context, reply jsonrpc2.Replier, req jsonrpc2.Request) error {
+func (h *Handler) Handle(ctx context.Context, req *jsonrpc2.Request) (any, error) {
 	switch req.Method() {
 	case "initialize":
-		return h.handleInitialize(ctx, reply, req)
+		return h.handleInitialize(ctx, req)
 	case "initialized":
-		return reply(ctx, nil, nil)
+		return nil, nil
 	case "shutdown":
-		return reply(ctx, nil, nil)
+		return nil, nil
 	case "exit":
-		return reply(ctx, nil, nil)
+		return nil, nil
 	case "textDocument/didOpen":
-		return h.handleDidOpen(ctx, reply, req)
+		return h.handleDidOpen(ctx, req)
 	case "textDocument/didChange":
-		return h.handleDidChange(ctx, reply, req)
+		return h.handleDidChange(ctx, req)
 	case "textDocument/didClose":
-		return h.handleDidClose(ctx, reply, req)
+		return h.handleDidClose(ctx, req)
 	case "textDocument/didSave":
-		return reply(ctx, nil, nil)
+		return nil, nil
 	case "textDocument/completion":
-		return h.handleCompletion(ctx, reply, req)
+		return h.handleCompletion(ctx, req)
 	case "textDocument/hover":
-		return h.handleHover(ctx, reply, req)
+		return h.handleHover(ctx, req)
 	case "textDocument/definition":
-		return h.handleDefinition(ctx, reply, req)
+		return h.handleDefinition(ctx, req)
 	case "textDocument/diagnostic":
-		return reply(ctx, nil, nil)
+		return nil, nil
 	default:
-		return reply(ctx, nil, jsonrpc2.NewError(jsonrpc2.MethodNotFound, "method not supported: "+req.Method()))
+		return nil, jsonrpc2.NewError(jsonrpc2.MethodNotFound, "method not supported: "+req.Method())
 	}
 }
 
-func (h *Handler) handleInitialize(_ context.Context, reply jsonrpc2.Replier, _ jsonrpc2.Request) error {
-	return reply(context.Background(), protocol.InitializeResult{
+func (h *Handler) handleInitialize(_ context.Context, _ *jsonrpc2.Request) (any, error) {
+	openClose := true
+	changeKind := protocol.TextDocumentSyncKindFull
+	return protocol.InitializeResult{
 		Capabilities: protocol.ServerCapabilities{
-			TextDocumentSync: protocol.TextDocumentSyncOptions{
-				OpenClose: true,
-				Change:    protocol.TextDocumentSyncKindFull,
+			TextDocumentSync: &protocol.TextDocumentSyncOptions{
+				OpenClose: &openClose,
+				Change:    &changeKind,
 			},
 			CompletionProvider: &protocol.CompletionOptions{
 				TriggerCharacters: []string{".", ":", "-", " "},
 			},
-			HoverProvider:      true,
-			DefinitionProvider: true,
+			HoverProvider:      protocol.Boolean(true),
+			DefinitionProvider: protocol.Boolean(true),
 		},
-		ServerInfo: &protocol.ServerInfo{
+		ServerInfo: protocol.ServerInfo{
 			Name:    "grlx-lsp",
-			Version: "0.1.0",
+			Version: protocol.NewOptional("0.1.0"),
 		},
-	}, nil)
+	}, nil
 }
 
-func (h *Handler) handleDidOpen(ctx context.Context, reply jsonrpc2.Replier, req jsonrpc2.Request) error {
+func (h *Handler) handleDidOpen(ctx context.Context, req *jsonrpc2.Request) (any, error) {
 	var params protocol.DidOpenTextDocumentParams
 	if err := json.Unmarshal(req.Params(), &params); err != nil {
-		return reply(ctx, nil, err)
+		return nil, err
 	}
 	h.updateDocument(string(params.TextDocument.URI), params.TextDocument.Text)
 	h.publishDiagnostics(ctx, string(params.TextDocument.URI))
-	return reply(ctx, nil, nil)
+	return nil, nil
 }
 
-func (h *Handler) handleDidChange(ctx context.Context, reply jsonrpc2.Replier, req jsonrpc2.Request) error {
+func (h *Handler) handleDidChange(ctx context.Context, req *jsonrpc2.Request) (any, error) {
 	var params protocol.DidChangeTextDocumentParams
 	if err := json.Unmarshal(req.Params(), &params); err != nil {
-		return reply(ctx, nil, err)
+		return nil, err
 	}
 	if len(params.ContentChanges) > 0 {
-		h.updateDocument(string(params.TextDocument.URI), params.ContentChanges[len(params.ContentChanges)-1].Text)
+		h.updateDocument(string(params.TextDocument.URI), contentChangeText(params.ContentChanges[len(params.ContentChanges)-1]))
 		h.publishDiagnostics(ctx, string(params.TextDocument.URI))
 	}
-	return reply(ctx, nil, nil)
+	return nil, nil
 }
 
-func (h *Handler) handleDidClose(_ context.Context, reply jsonrpc2.Replier, req jsonrpc2.Request) error {
+func contentChangeText(change protocol.TextDocumentContentChangeEvent) string {
+	switch change := change.(type) {
+	case *protocol.TextDocumentContentChangeWholeDocument:
+		return change.Text
+	case *protocol.TextDocumentContentChangePartial:
+		return change.Text
+	default:
+		return ""
+	}
+}
+
+func (h *Handler) handleDidClose(_ context.Context, req *jsonrpc2.Request) (any, error) {
 	var params protocol.DidCloseTextDocumentParams
 	if err := json.Unmarshal(req.Params(), &params); err != nil {
-		return reply(context.Background(), nil, err)
+		return nil, err
 	}
 	h.mu.Lock()
 	delete(h.docs, string(params.TextDocument.URI))
 	h.mu.Unlock()
-	return reply(context.Background(), nil, nil)
+	return nil, nil
 }
 
 func (h *Handler) updateDocument(uri, content string) {
