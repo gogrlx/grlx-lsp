@@ -3,9 +3,28 @@ package lsp
 import (
 	"testing"
 
+	"go.lsp.dev/protocol"
+
 	"github.com/gogrlx/grlx-lsp/internal/recipe"
 	"github.com/gogrlx/grlx-lsp/internal/schema"
 )
+
+// TestDidChangeParamsDecode guards against regressing to stdlib encoding/json,
+// which cannot decode the v1 protocol union type TextDocumentContentChangeEvent.
+// Handlers must decode with protocol.Unmarshal.
+func TestDidChangeParamsDecode(t *testing.T) {
+	blob := []byte(`{"textDocument":{"uri":"file:///x.grlx","version":2},"contentChanges":[{"text":"steps:\n"}]}`)
+	var params protocol.DidChangeTextDocumentParams
+	if err := protocol.Unmarshal(blob, &params); err != nil {
+		t.Fatalf("protocol.Unmarshal failed: %v", err)
+	}
+	if len(params.ContentChanges) == 0 {
+		t.Fatal("expected content changes to decode")
+	}
+	if got := contentChangeText(params.ContentChanges[len(params.ContentChanges)-1]); got != "steps:\n" {
+		t.Errorf("contentChangeText = %q, want %q", got, "steps:\n")
+	}
+}
 
 func TestDiagnoseUnknownIngredient(t *testing.T) {
 	h := NewHandler(schema.DefaultRegistry())

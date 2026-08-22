@@ -2,7 +2,6 @@ package lsp
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 
 	"go.lsp.dev/jsonrpc2"
@@ -13,7 +12,7 @@ import (
 
 func (h *Handler) handleHover(_ context.Context, req *jsonrpc2.Request) (any, error) {
 	var params protocol.HoverParams
-	if err := json.Unmarshal(req.Params(), &params); err != nil {
+	if err := protocol.Unmarshal(req.Params(), &params); err != nil {
 		return nil, err
 	}
 

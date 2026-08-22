@@ -2,7 +2,6 @@ package lsp
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 
 	"go.lsp.dev/jsonrpc2"
@@ -11,7 +10,7 @@ import (
 
 func (h *Handler) handleDefinition(_ context.Context, req *jsonrpc2.Request) (any, error) {
 	var params protocol.DefinitionParams
-	if err := json.Unmarshal(req.Params(), &params); err != nil {
+	if err := protocol.Unmarshal(req.Params(), &params); err != nil {
 		return nil, err
 	}
 

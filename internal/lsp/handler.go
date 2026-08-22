@@ -3,7 +3,6 @@ package lsp
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"sync"
 
@@ -68,6 +67,9 @@ func (h *Handler) Handle(ctx context.Context, req *jsonrpc2.Request) (any, error
 	case "textDocument/diagnostic":
 		return nil, nil
 	default:
+		if !req.IsCall() {
+			return nil, nil
+		}
 		return nil, jsonrpc2.NewError(jsonrpc2.MethodNotFound, "method not supported: "+req.Method())
 	}
 }
@@ -96,8 +98,9 @@ func (h *Handler) handleInitialize(_ context.Context, _ *jsonrpc2.Request) (any,
 
 func (h *Handler) handleDidOpen(ctx context.Context, req *jsonrpc2.Request) (any, error) {
 	var params protocol.DidOpenTextDocumentParams
-	if err := json.Unmarshal(req.Params(), &params); err != nil {
-		return nil, err
+	if err := protocol.Unmarshal(req.Params(), &params); err != nil {
+		// Notifications must not fail the connection on a bad payload.
+		return nil, nil
 	}
 	h.updateDocument(string(params.TextDocument.URI), params.TextDocument.Text)
 	h.publishDiagnostics(ctx, string(params.TextDocument.URI))
@@ -106,8 +109,9 @@ func (h *Handler) handleDidOpen(ctx context.Context, req *jsonrpc2.Request) (any
 
 func (h *Handler) handleDidChange(ctx context.Context, req *jsonrpc2.Request) (any, error) {
 	var params protocol.DidChangeTextDocumentParams
-	if err := json.Unmarshal(req.Params(), &params); err != nil {
-		return nil, err
+	if err := protocol.Unmarshal(req.Params(), &params); err != nil {
+		// Notifications must not fail the connection on a bad payload.
+		return nil, nil
 	}
 	if len(params.ContentChanges) > 0 {
 		h.updateDocument(string(params.TextDocument.URI), contentChangeText(params.ContentChanges[len(params.ContentChanges)-1]))
@@ -129,8 +133,9 @@ func contentChangeText(change protocol.TextDocumentContentChangeEvent) string {
 
 func (h *Handler) handleDidClose(_ context.Context, req *jsonrpc2.Request) (any, error) {
 	var params protocol.DidCloseTextDocumentParams
-	if err := json.Unmarshal(req.Params(), &params); err != nil {
-		return nil, err
+	if err := protocol.Unmarshal(req.Params(), &params); err != nil {
+		// Notifications must not fail the connection on a bad payload.
+		return nil, nil
 	}
 	h.mu.Lock()
 	delete(h.docs, string(params.TextDocument.URI))
