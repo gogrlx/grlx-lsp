@@ -69,7 +69,7 @@ func TestDiagnoseRequisiteUnknownRef(t *testing.T) {
 	diags := h.diagnose(doc)
 	found := false
 	for _, d := range diags {
-		if d.Severity == protocol.DiagnosticSeverityWarning && contains(d.Message, "reference to unknown step") {
+		if d.Severity == protocol.DiagnosticSeverityWarning && contains(diagnosticText(d.Message), "reference to unknown step") {
 			found = true
 		}
 	}
@@ -95,7 +95,7 @@ func TestDiagnoseDuplicateStepIDs(t *testing.T) {
 	diags := h.diagnose(doc)
 	duplicateCount := 0
 	for _, d := range diags {
-		if d.Severity == protocol.DiagnosticSeverityError && d.Message == "duplicate step ID: duplicate" {
+		if d.Severity == protocol.DiagnosticSeverityError && diagnosticText(d.Message) == "duplicate step ID: duplicate" {
 			duplicateCount++
 		}
 	}
@@ -228,5 +228,16 @@ func TestCheckUnknownRequisitesAllowed(t *testing.T) {
 	diags := checkUnknown(s, m)
 	if len(diags) != 0 {
 		t.Errorf("'requisites' should be allowed, got diagnostics: %v", diags)
+	}
+}
+
+func diagnosticText(message protocol.InlayHintTooltip) string {
+	switch message := message.(type) {
+	case protocol.String:
+		return string(message)
+	case *protocol.MarkupContent:
+		return message.Value
+	default:
+		return ""
 	}
 }

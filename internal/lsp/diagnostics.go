@@ -4,14 +4,15 @@ import (
 	"context"
 
 	"go.lsp.dev/protocol"
+	lspuri "go.lsp.dev/uri"
 	"gopkg.in/yaml.v3"
 
 	"github.com/gogrlx/grlx-lsp/internal/recipe"
 	"github.com/gogrlx/grlx-lsp/internal/schema"
 )
 
-func (h *Handler) publishDiagnostics(ctx context.Context, uri string) {
-	doc := h.getDocument(uri)
+func (h *Handler) publishDiagnostics(ctx context.Context, docURI string) {
+	doc := h.getDocument(docURI)
 	if doc == nil || h.conn == nil {
 		return
 	}
@@ -19,7 +20,7 @@ func (h *Handler) publishDiagnostics(ctx context.Context, uri string) {
 	diags := h.diagnose(doc)
 
 	_ = h.conn.Notify(ctx, "textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
-		URI:         protocol.DocumentURI(uri),
+		URI:         lspuri.URI(docURI),
 		Diagnostics: diags,
 	})
 }
@@ -36,8 +37,8 @@ func (h *Handler) diagnose(doc *document) []protocol.Diagnostic {
 		diags = append(diags, protocol.Diagnostic{
 			Range:    pointRange(e.Line-1, e.Col-1),
 			Severity: protocol.DiagnosticSeverityError,
-			Source:   "grlx-lsp",
-			Message:  e.Message,
+			Source:   diagnosticSource(),
+			Message:  diagnosticMessage(e.Message),
 		})
 	}
 
@@ -55,8 +56,8 @@ func (h *Handler) diagnose(doc *document) []protocol.Diagnostic {
 			diags = append(diags, protocol.Diagnostic{
 				Range:    yamlNodeRange(s.IDNode),
 				Severity: protocol.DiagnosticSeverityError,
-				Source:   "grlx-lsp",
-				Message:  "duplicate step ID: " + s.ID,
+				Source:   diagnosticSource(),
+				Message:  diagnosticMessage("duplicate step ID: " + s.ID),
 			})
 		}
 
@@ -69,8 +70,8 @@ func (h *Handler) diagnose(doc *document) []protocol.Diagnostic {
 			diags = append(diags, protocol.Diagnostic{
 				Range:    yamlNodeRange(s.MethodNode),
 				Severity: protocol.DiagnosticSeverityError,
-				Source:   "grlx-lsp",
-				Message:  "unknown ingredient: " + s.Ingredient,
+				Source:   diagnosticSource(),
+				Message:  diagnosticMessage("unknown ingredient: " + s.Ingredient),
 			})
 			continue
 		}
@@ -80,8 +81,8 @@ func (h *Handler) diagnose(doc *document) []protocol.Diagnostic {
 			diags = append(diags, protocol.Diagnostic{
 				Range:    yamlNodeRange(s.MethodNode),
 				Severity: protocol.DiagnosticSeverityError,
-				Source:   "grlx-lsp",
-				Message:  "unknown method: " + s.Ingredient + "." + s.Method,
+				Source:   diagnosticSource(),
+				Message:  diagnosticMessage("unknown method: " + s.Ingredient + "." + s.Method),
 			})
 			continue
 		}
@@ -95,8 +96,8 @@ func (h *Handler) diagnose(doc *document) []protocol.Diagnostic {
 				diags = append(diags, protocol.Diagnostic{
 					Range:    yamlNodeRange(req.Node),
 					Severity: protocol.DiagnosticSeverityError,
-					Source:   "grlx-lsp",
-					Message:  "unknown requisite type: " + req.Condition,
+					Source:   diagnosticSource(),
+					Message:  diagnosticMessage("unknown requisite type: " + req.Condition),
 				})
 			}
 			for _, ref := range req.StepIDs {
@@ -104,8 +105,8 @@ func (h *Handler) diagnose(doc *document) []protocol.Diagnostic {
 					diags = append(diags, protocol.Diagnostic{
 						Range:    yamlNodeRange(req.Node),
 						Severity: protocol.DiagnosticSeverityWarning,
-						Source:   "grlx-lsp",
-						Message:  "reference to unknown step: " + ref + " (may be defined in an included recipe)",
+						Source:   diagnosticSource(),
+						Message:  diagnosticMessage("reference to unknown step: " + ref + " (may be defined in an included recipe)"),
 					})
 				}
 			}
@@ -126,8 +127,8 @@ func checkRequired(s recipe.Step, m *schema.Method) []protocol.Diagnostic {
 			diags = append(diags, protocol.Diagnostic{
 				Range:    yamlNodeRange(s.MethodNode),
 				Severity: protocol.DiagnosticSeverityWarning,
-				Source:   "grlx-lsp",
-				Message:  "missing required property: " + prop.Key,
+				Source:   diagnosticSource(),
+				Message:  diagnosticMessage("missing required property: " + prop.Key),
 			})
 		}
 	}
@@ -146,12 +147,20 @@ func checkUnknown(s recipe.Step, m *schema.Method) []protocol.Diagnostic {
 			diags = append(diags, protocol.Diagnostic{
 				Range:    yamlNodeRange(p.KeyNode),
 				Severity: protocol.DiagnosticSeverityWarning,
-				Source:   "grlx-lsp",
-				Message:  "unknown property: " + p.Key + " for " + s.Ingredient + "." + s.Method,
+				Source:   diagnosticSource(),
+				Message:  diagnosticMessage("unknown property: " + p.Key + " for " + s.Ingredient + "." + s.Method),
 			})
 		}
 	}
 	return diags
+}
+
+func diagnosticSource() protocol.Optional[string] {
+	return protocol.NewOptional("grlx-lsp")
+}
+
+func diagnosticMessage(message string) protocol.InlayHintTooltip {
+	return protocol.String(message)
 }
 
 func isValidRequisiteType(name string) bool {

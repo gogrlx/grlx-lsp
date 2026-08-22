@@ -2,7 +2,6 @@ package lsp
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 
 	"go.lsp.dev/jsonrpc2"
@@ -11,17 +10,15 @@ import (
 	"github.com/gogrlx/grlx-lsp/internal/schema"
 )
 
-func (h *Handler) handleCompletion(_ context.Context, reply jsonrpc2.Replier, req jsonrpc2.Request) error {
-	ctx := context.Background()
-
+func (h *Handler) handleCompletion(_ context.Context, req *jsonrpc2.Request) (any, error) {
 	var params protocol.CompletionParams
-	if err := json.Unmarshal(req.Params(), &params); err != nil {
-		return reply(ctx, nil, err)
+	if err := protocol.Unmarshal(req.Params(), &params); err != nil {
+		return nil, err
 	}
 
 	doc := h.getDocument(string(params.TextDocument.URI))
 	if doc == nil {
-		return reply(ctx, &protocol.CompletionList{}, nil)
+		return &protocol.CompletionList{}, nil
 	}
 
 	line := lineAt(doc.content, int(params.Position.Line))
@@ -46,10 +43,10 @@ func (h *Handler) handleCompletion(_ context.Context, reply jsonrpc2.Replier, re
 		items = h.completeIngredientMethod(prefix)
 	}
 
-	return reply(ctx, &protocol.CompletionList{
+	return &protocol.CompletionList{
 		IsIncomplete: false,
 		Items:        items,
-	}, nil)
+	}, nil
 }
 
 func (h *Handler) completeTopLevel(_ string) []protocol.CompletionItem {
@@ -75,8 +72,8 @@ func (h *Handler) completeIngredientMethod(prefix string) []protocol.CompletionI
 				items = append(items, protocol.CompletionItem{
 					Label:         ingName + "." + m.Name,
 					Kind:          protocol.CompletionItemKindFunction,
-					Detail:        m.Description,
-					Documentation: buildMethodDoc(ing, &m),
+					Detail:        optionalString(m.Description),
+					Documentation: protocol.String(buildMethodDoc(ing, &m)),
 				})
 			}
 		}
@@ -99,8 +96,8 @@ func (h *Handler) completeIngredientMethod(prefix string) []protocol.CompletionI
 		items = append(items, protocol.CompletionItem{
 			Label:         name,
 			Kind:          protocol.CompletionItemKindFunction,
-			Detail:        detail,
-			Documentation: doc,
+			Detail:        optionalString(detail),
+			Documentation: protocol.String(doc),
 		})
 	}
 	return items
@@ -136,9 +133,9 @@ func (h *Handler) completeProperties(doc *document, line int) []protocol.Complet
 		}
 		items = append(items, protocol.CompletionItem{
 			Label:      "- " + prop.Key + ": ",
-			InsertText: "- " + prop.Key + ": ",
+			InsertText: optionalString("- " + prop.Key + ": "),
 			Kind:       protocol.CompletionItemKindProperty,
-			Detail:     detail,
+			Detail:     optionalString(detail),
 		})
 	}
 
@@ -147,7 +144,7 @@ func (h *Handler) completeProperties(doc *document, line int) []protocol.Complet
 		items = append(items, protocol.CompletionItem{
 			Label:  "- requisites:",
 			Kind:   protocol.CompletionItemKindKeyword,
-			Detail: "Step dependencies",
+			Detail: optionalString("Step dependencies"),
 		})
 	}
 
@@ -160,10 +157,17 @@ func (h *Handler) completeRequisiteTypes(_ string) []protocol.CompletionItem {
 		items = append(items, protocol.CompletionItem{
 			Label:  "- " + rt.Name + ": ",
 			Kind:   protocol.CompletionItemKindEnum,
-			Detail: rt.Description,
+			Detail: optionalString(rt.Description),
 		})
 	}
 	return items
+}
+
+func optionalString(value string) protocol.Optional[string] {
+	if value == "" {
+		return protocol.Optional[string]{}
+	}
+	return protocol.NewOptional(value)
 }
 
 func (h *Handler) completeStepIDs(doc *document) []protocol.CompletionItem {
