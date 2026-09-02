@@ -238,6 +238,42 @@ steps:
 	}
 }
 
+func TestParseMultipleRequisiteBlocks(t *testing.T) {
+	data := []byte(`
+steps:
+  first step:
+    file.exists:
+      - name: /tmp/a
+  second step:
+    file.exists:
+      - name: /tmp/b
+      - requisites:
+        - require: first step
+      - user: root
+      - requisites:
+        - onchanges: first step
+`)
+	r := Parse(data)
+
+	if len(r.Errors) > 0 {
+		t.Fatalf("unexpected parse errors: %v", r.Errors)
+	}
+	if len(r.Steps) != 2 {
+		t.Fatalf("expected 2 steps, got %d", len(r.Steps))
+	}
+
+	requisites := r.Steps[1].Requisites
+	if len(requisites) != 2 {
+		t.Fatalf("expected 2 requisites, got %d: %v", len(requisites), requisites)
+	}
+	if requisites[0].Condition != "require" || requisites[0].StepIDs[0] != "first step" {
+		t.Fatalf("unexpected first requisite: %#v", requisites[0])
+	}
+	if requisites[1].Condition != "onchanges" || requisites[1].StepIDs[0] != "first step" {
+		t.Fatalf("unexpected second requisite: %#v", requisites[1])
+	}
+}
+
 func TestParseEmptyRecipe(t *testing.T) {
 	r := Parse([]byte(""))
 	if r == nil {

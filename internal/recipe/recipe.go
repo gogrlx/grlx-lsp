@@ -198,7 +198,7 @@ func (r *Recipe) parseStep(idNode, bodyNode *yaml.Node) {
 			k := item.Content[j]
 			v := item.Content[j+1]
 			if k.Value == "requisites" {
-				step.Requisites = parseRequisites(v)
+				step.Requisites = append(step.Requisites, parseRequisites(v)...)
 			} else {
 				step.Properties = append(step.Properties, PropertyEntry{
 					Key:       k.Value,
