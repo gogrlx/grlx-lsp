@@ -260,6 +260,22 @@ func TestIsInRequisiteValue(t *testing.T) {
 	}
 }
 
+func TestIsInRequisiteValueAfterEmptyInlineCondition(t *testing.T) {
+	content := `steps:
+  first:
+    file.exists:
+      - name: /tmp/a
+  second:
+    file.exists:
+      - name: /tmp/b
+      - requisites:
+        - require: `
+
+	if !isInRequisiteValue(content, 8) {
+		t.Error("line 8 should be in requisite value context after condition prefix")
+	}
+}
+
 func TestRequisiteValueAtPosition(t *testing.T) {
 	content := `steps:
   first:
@@ -307,6 +323,38 @@ func TestHandleCompletionPrefersRequisiteTypesForBlankRequisiteItems(t *testing.
 	items := h.completeRequisiteTypes("")
 	if len(items) == 0 || items[0].Kind != protocol.CompletionItemKindEnum {
 		t.Fatal("expected requisite type completions for blank requisite item")
+	}
+}
+
+func TestHandleCompletionPrefersStepIDsForRequisiteValues(t *testing.T) {
+	h := NewHandler(schema.DefaultRegistry())
+	src := `steps:
+  install nginx:
+    pkg.installed:
+      - name: nginx
+  start nginx:
+    service.running:
+      - name: nginx
+      - requisites:
+        - require: `
+	h.updateDocument("file:///test.grlx", src)
+	doc := h.getDocument("file:///test.grlx")
+
+	line := 8
+	if !isInRequisiteValue(doc.content, line) {
+		t.Fatal("expected empty require value to be treated as requisite-value context")
+	}
+
+	items := h.completionItems(doc, line, len(lineAt(doc.content, line)))
+	labelSet := make(map[string]bool)
+	for _, item := range items {
+		labelSet[item.Label] = true
+		if item.Kind != protocol.CompletionItemKindReference {
+			t.Fatalf("expected reference completions, got %v", item.Kind)
+		}
+	}
+	if !labelSet["install nginx"] || !labelSet["start nginx"] {
+		t.Fatalf("expected step ID completions, got %v", labelSet)
 	}
 }
 
