@@ -21,8 +21,17 @@ func (h *Handler) handleCompletion(_ context.Context, req *jsonrpc2.Request) (an
 		return &protocol.CompletionList{}, nil
 	}
 
-	line := lineAt(doc.content, int(params.Position.Line))
-	col := int(params.Position.Character)
+	items := h.completionItems(doc, int(params.Position.Line), int(params.Position.Character))
+
+	return &protocol.CompletionList{
+		IsIncomplete: false,
+		Items:        items,
+	}, nil
+}
+
+func (h *Handler) completionItems(doc *document, lineNumber, character int) []protocol.CompletionItem {
+	line := lineAt(doc.content, lineNumber)
+	col := character
 	if col > len(line) {
 		col = len(line)
 	}
@@ -31,22 +40,19 @@ func (h *Handler) handleCompletion(_ context.Context, req *jsonrpc2.Request) (an
 	var items []protocol.CompletionItem
 
 	switch {
-	case isTopLevel(doc.content, int(params.Position.Line)):
+	case isTopLevel(doc.content, lineNumber):
 		items = h.completeTopLevel(prefix)
-	case isInRequisites(doc.content, int(params.Position.Line)):
-		items = h.completeRequisiteTypes(prefix)
-	case isInRequisiteValue(doc.content, int(params.Position.Line)):
+	case isInRequisiteValue(doc.content, lineNumber):
 		items = h.completeStepIDs(doc)
+	case isInRequisites(doc.content, lineNumber):
+		items = h.completeRequisiteTypes(prefix)
 	case isPropertyPosition(line):
-		items = h.completeProperties(doc, int(params.Position.Line))
+		items = h.completeProperties(doc, lineNumber)
 	default:
 		items = h.completeIngredientMethod(prefix)
 	}
 
-	return &protocol.CompletionList{
-		IsIncomplete: false,
-		Items:        items,
-	}, nil
+	return items
 }
 
 func (h *Handler) completeTopLevel(_ string) []protocol.CompletionItem {
@@ -258,8 +264,47 @@ func isInRequisites(content string, line int) bool {
 }
 
 func isInRequisiteValue(content string, line int) bool {
-	_, ok := requisiteValueAtPosition(content, line, len(lineAt(content, line)))
-	return ok
+	return isRequisiteValuePosition(content, line, len(lineAt(content, line)))
+}
+
+func isRequisiteValuePosition(content string, line, col int) bool {
+	lines := strings.Split(content, "\n")
+	if line < 0 || line >= len(lines) {
+		return false
+	}
+	if isStepBoundary(lines, line) {
+		return false
+	}
+
+	currentLine := lines[line]
+	currentTrimmed := strings.TrimSpace(currentLine)
+	currentIndent := indentation(currentLine)
+
+	for i := line; i >= 0 && i >= line-8; i-- {
+		trimmed := strings.TrimSpace(lines[i])
+		prefix, ok := requisitePrefix(trimmed)
+		if !ok {
+			if i != line && isStepBoundary(lines, i) {
+				return false
+			}
+			continue
+		}
+
+		conditionIndent := indentation(lines[i])
+		if i == line {
+			valueStart := conditionIndent + len(prefix)
+			return col >= valueStart
+		}
+
+		if currentTrimmed == "" || currentIndent <= conditionIndent || !strings.HasPrefix(currentTrimmed, "- ") {
+			return false
+		}
+
+		valueStart := currentIndent + 2
+		return col >= valueStart
+	}
+
+	return false
 }
 
 func requisiteValueAtPosition(content string, line, col int) (string, bool) {
