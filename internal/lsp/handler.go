@@ -131,7 +131,7 @@ func contentChangeText(change protocol.TextDocumentContentChangeEvent) string {
 	}
 }
 
-func (h *Handler) handleDidClose(_ context.Context, req *jsonrpc2.Request) (any, error) {
+func (h *Handler) handleDidClose(ctx context.Context, req *jsonrpc2.Request) (any, error) {
 	var params protocol.DidCloseTextDocumentParams
 	if err := protocol.Unmarshal(req.Params(), &params); err != nil {
 		// Notifications must not fail the connection on a bad payload.
@@ -140,6 +140,13 @@ func (h *Handler) handleDidClose(_ context.Context, req *jsonrpc2.Request) (any,
 	h.mu.Lock()
 	delete(h.docs, string(params.TextDocument.URI))
 	h.mu.Unlock()
+	// Diagnostics belong to the server; closing a document must clear them.
+	if h.conn != nil {
+		_ = h.conn.Notify(ctx, "textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
+			URI:         params.TextDocument.URI,
+			Diagnostics: []protocol.Diagnostic{},
+		})
+	}
 	return nil, nil
 }
 
