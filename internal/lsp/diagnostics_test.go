@@ -241,3 +241,42 @@ func diagnosticText(message protocol.InlayHintTooltip) string {
 		return ""
 	}
 }
+
+func TestDiagnoseDuplicateProperties(t *testing.T) {
+	for _, properties := range []string{
+		"      - name: /tmp/a\n      - name: /tmp/b",
+		"      - name: /tmp/a\n        name: /tmp/b",
+	} {
+		src := "steps:\n  test:\n    file.exists:\n" + properties
+		handler := NewHandler(schema.DefaultRegistry())
+		diagnostics := handler.diagnose(&document{content: src, recipe: recipe.Parse([]byte(src))})
+		var count int
+		for _, diagnostic := range diagnostics {
+			if diagnosticText(diagnostic.Message) == "duplicate property: name" && diagnostic.Severity == protocol.DiagnosticSeverityError {
+				count++
+			}
+		}
+		if count != 2 {
+			t.Errorf("expected both duplicate keys to be diagnosed, got %d: %v", count, diagnostics)
+		}
+	}
+}
+
+func TestDiagnoseDistinctPropertiesAndRepeatedRequisites(t *testing.T) {
+	src := `steps:
+  test:
+    file.exists:
+      - name: /tmp/a
+      - requisites:
+        - require: test
+      - requisites:
+        - onfail: test
+  other:
+    file.exists:
+      - name: /tmp/b`
+	handler := NewHandler(schema.DefaultRegistry())
+	diagnostics := handler.diagnose(&document{content: src, recipe: recipe.Parse([]byte(src))})
+	if len(diagnostics) != 0 {
+		t.Fatalf("valid properties and repeated requisite blocks must not produce diagnostics: %v", diagnostics)
+	}
+}
