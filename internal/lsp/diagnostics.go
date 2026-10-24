@@ -87,6 +87,7 @@ func (h *Handler) diagnose(doc *document) []protocol.Diagnostic {
 			continue
 		}
 
+		diags = append(diags, checkDuplicateProperties(s)...)
 		diags = append(diags, checkRequired(s, m)...)
 		diags = append(diags, checkUnknown(s, m)...)
 
@@ -114,6 +115,27 @@ func (h *Handler) diagnose(doc *document) []protocol.Diagnostic {
 	}
 
 	return diags
+}
+
+// checkDuplicateProperties catches ambiguous values across the entire property list.
+// Requisite blocks are parsed separately and may legitimately appear more than once.
+func checkDuplicateProperties(step recipe.Step) []protocol.Diagnostic {
+	counts := make(map[string]int)
+	for _, property := range step.Properties {
+		counts[property.Key]++
+	}
+	var diagnostics []protocol.Diagnostic
+	for _, property := range step.Properties {
+		if counts[property.Key] > 1 {
+			diagnostics = append(diagnostics, protocol.Diagnostic{
+				Range:    yamlNodeRange(property.KeyNode),
+				Severity: protocol.DiagnosticSeverityError,
+				Source:   diagnosticSource(),
+				Message:  diagnosticMessage("duplicate property: " + property.Key),
+			})
+		}
+	}
+	return diagnostics
 }
 
 func checkRequired(s recipe.Step, m *schema.Method) []protocol.Diagnostic {
