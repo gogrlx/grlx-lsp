@@ -241,3 +241,19 @@ func diagnosticText(message protocol.InlayHintTooltip) string {
 		return ""
 	}
 }
+
+func TestDiagnoseMalformedRequisites(t *testing.T) {
+	source := "steps:\n  example:\n    file.exists:\n      - name: /tmp/example\n      - requisites: invalid\n"
+	handler := NewHandler(schema.DefaultRegistry())
+	diagnostics := handler.diagnose(&document{content: source, recipe: recipe.Parse([]byte(source))})
+	if len(diagnostics) != 1 {
+		t.Fatalf("expected one diagnostic, got %v", diagnostics)
+	}
+	diagnostic := diagnostics[0]
+	if diagnostic.Message != protocol.String("requisites must be a list") || diagnostic.Severity != protocol.DiagnosticSeverityError {
+		t.Fatalf("unexpected diagnostic: %v", diagnostic)
+	}
+	if diagnostic.Range.Start.Line != 4 || diagnostic.Range.Start.Character != 20 {
+		t.Fatalf("expected diagnostic at malformed requisite value, got %v", diagnostic.Range)
+	}
+}
