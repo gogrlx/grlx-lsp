@@ -295,3 +295,35 @@ steps:
 		t.Fatalf("expected 1 step, got %d", len(r.Steps))
 	}
 }
+
+func TestParseMalformedRequisites(t *testing.T) {
+	for _, test := range []struct {
+		name, value, message string
+	}{
+		{"scalar block", "invalid", "requisites must be a list"},
+		{"mapping block", "{require: first}", "requisites must be a list"},
+		{"scalar entry", "[invalid]", "requisite entries must be mappings"},
+		{"mapping reference", "[{require: {step: first}}]", "requisite reference must be a scalar or list"},
+		{"nested reference", "[{require: [first, {step: second}]}]", "requisite references must be scalars"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			parsed := Parse([]byte("steps:\n  example:\n    file.exists:\n      - name: /tmp/example\n      - requisites: " + test.value + "\n      - requisites:\n        - onchanges: first\n"))
+			if len(parsed.Errors) != 1 || parsed.Errors[0].Message != test.message {
+				t.Fatalf("expected %q, got %v", test.message, parsed.Errors)
+			}
+			if parsed.Errors[0].Line != 5 || parsed.Errors[0].Col <= 0 {
+				t.Fatalf("expected error at malformed value on line 5, got %v", parsed.Errors[0])
+			}
+			if len(parsed.Steps) != 1 {
+				t.Fatalf("expected valid step to remain available, got %v", parsed.Steps)
+			}
+			requisites := parsed.Steps[0].Requisites
+			if len(requisites) == 0 || requisites[len(requisites)-1].Condition != "onchanges" || requisites[len(requisites)-1].StepIDs[0] != "first" {
+				t.Fatalf("expected following requisite block to survive, got %v", requisites)
+			}
+			if test.name == "nested reference" && (len(requisites[0].StepIDs) != 1 || requisites[0].StepIDs[0] != "first") {
+				t.Fatalf("expected valid reference to survive, got %v", requisites)
+			}
+		})
+	}
+}

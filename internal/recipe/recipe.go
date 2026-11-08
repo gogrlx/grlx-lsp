@@ -198,7 +198,7 @@ func (r *Recipe) parseStep(idNode, bodyNode *yaml.Node) {
 			k := item.Content[j]
 			v := item.Content[j+1]
 			if k.Value == "requisites" {
-				step.Requisites = append(step.Requisites, parseRequisites(v)...)
+				step.Requisites = append(step.Requisites, r.parseRequisites(v)...)
 			} else {
 				step.Properties = append(step.Properties, PropertyEntry{
 					Key:       k.Value,
@@ -212,13 +212,15 @@ func (r *Recipe) parseStep(idNode, bodyNode *yaml.Node) {
 	r.Steps = append(r.Steps, step)
 }
 
-func parseRequisites(node *yaml.Node) []RequisiteEntry {
+func (r *Recipe) parseRequisites(node *yaml.Node) []RequisiteEntry {
 	var reqs []RequisiteEntry
 	if node.Kind != yaml.SequenceNode {
+		r.Errors = append(r.Errors, ParseError{Message: "requisites must be a list", Line: node.Line, Col: node.Column})
 		return reqs
 	}
 	for _, item := range node.Content {
 		if item.Kind != yaml.MappingNode {
+			r.Errors = append(r.Errors, ParseError{Message: "requisite entries must be mappings", Line: item.Line, Col: item.Column})
 			continue
 		}
 		for i := 0; i+1 < len(item.Content); i += 2 {
@@ -232,8 +234,12 @@ func parseRequisites(node *yaml.Node) []RequisiteEntry {
 				for _, s := range valNode.Content {
 					if s.Kind == yaml.ScalarNode {
 						stepIDs = append(stepIDs, s.Value)
+					} else {
+						r.Errors = append(r.Errors, ParseError{Message: "requisite references must be scalars", Line: s.Line, Col: s.Column})
 					}
 				}
+			default:
+				r.Errors = append(r.Errors, ParseError{Message: "requisite reference must be a scalar or list", Line: valNode.Line, Col: valNode.Column})
 			}
 			reqs = append(reqs, RequisiteEntry{
 				Condition: condition,
