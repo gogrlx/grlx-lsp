@@ -257,3 +257,19 @@ func TestDiagnoseMalformedRequisites(t *testing.T) {
 		t.Fatalf("expected diagnostic at malformed requisite value, got %v", diagnostic.Range)
 	}
 }
+
+func TestDiagnoseMalformedIncludeEntry(t *testing.T) {
+	h := NewHandler(schema.DefaultRegistry())
+	src := "include:\n  - {}\n"
+	diags := h.diagnose(&document{content: src, recipe: recipe.Parse([]byte(src))})
+	if len(diags) != 1 {
+		t.Fatalf("expected one diagnostic, got %v", diags)
+	}
+	diag := diags[0]
+	if diagnosticText(diag.Message) != "include entries must be non-empty strings" || diag.Severity != protocol.DiagnosticSeverityError {
+		t.Errorf("unexpected diagnostic: %+v", diag)
+	}
+	if diag.Range.Start.Line != 1 || diag.Range.Start.Character != 4 {
+		t.Errorf("unexpected diagnostic position: %+v", diag.Range)
+	}
+}

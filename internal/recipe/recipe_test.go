@@ -327,3 +327,32 @@ func TestParseMalformedRequisites(t *testing.T) {
 		})
 	}
 }
+
+func TestParseMalformedIncludeEntries(t *testing.T) {
+	for _, entry := range []string{"null", "42", "true", "{}", "[]", `""`, `"   "`} {
+		t.Run(entry, func(t *testing.T) {
+			src := "include:\n  - apache\n  - " + entry + "\n  - .dev\nsteps:\n  install:\n    pkg.installed:\n      - name: nginx\n"
+			parsed := Parse([]byte(src))
+			if len(parsed.Errors) != 1 {
+				t.Fatalf("expected one include error, got %v", parsed.Errors)
+			}
+			parseError := parsed.Errors[0]
+			if parseError.Message != "include entries must be non-empty strings" || parseError.Line != 3 || parseError.Col != 5 {
+				t.Errorf("unexpected error: %+v", parseError)
+			}
+			if len(parsed.Includes) != 2 || parsed.Includes[0].Value != "apache" || parsed.Includes[1].Value != ".dev" {
+				t.Errorf("valid includes not preserved: %v", parsed.Includes)
+			}
+			if len(parsed.Steps) != 1 {
+				t.Errorf("following steps not preserved: %v", parsed.Steps)
+			}
+		})
+	}
+}
+
+func TestParseQuotedIncludeStrings(t *testing.T) {
+	parsed := Parse([]byte("include: [\"42\", \"true\", \"null\"]\n"))
+	if len(parsed.Errors) != 0 || len(parsed.Includes) != 3 {
+		t.Fatalf("quoted strings must remain valid: %+v", parsed)
+	}
+}

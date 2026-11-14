@@ -107,9 +107,15 @@ func (r *Recipe) parseIncludes(node *yaml.Node) {
 		return
 	}
 	for _, item := range node.Content {
-		if item.Kind == yaml.ScalarNode {
-			r.Includes = append(r.Includes, Include{Value: item.Value, Node: item})
+		if item.Kind != yaml.ScalarNode || item.Tag != "!!str" || strings.TrimSpace(item.Value) == "" {
+			r.Errors = append(r.Errors, ParseError{
+				Message: "include entries must be non-empty strings",
+				Line:    item.Line,
+				Col:     item.Column,
+			})
+			continue
 		}
+		r.Includes = append(r.Includes, Include{Value: item.Value, Node: item})
 	}
 }
 
