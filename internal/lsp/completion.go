@@ -280,7 +280,7 @@ func isRequisiteValuePosition(content string, line, col int) bool {
 	currentTrimmed := strings.TrimSpace(currentLine)
 	currentIndent := indentation(currentLine)
 
-	for i := line; i >= 0 && i >= line-8; i-- {
+	for i := line; i >= 0; i-- {
 		trimmed := strings.TrimSpace(lines[i])
 		prefix, ok := requisitePrefix(trimmed)
 		if !ok {
@@ -320,7 +320,7 @@ func requisiteValueAtPosition(content string, line, col int) (string, bool) {
 	currentTrimmed := strings.TrimSpace(currentLine)
 	currentIndent := indentation(currentLine)
 
-	for i := line; i >= 0 && i >= line-8; i-- {
+	for i := line; i >= 0; i-- {
 		trimmed := strings.TrimSpace(lines[i])
 		prefix, ok := requisitePrefix(trimmed)
 		if !ok {
