@@ -1,6 +1,8 @@
 package lsp
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -68,5 +70,52 @@ func TestRequisiteValueAtPositionSequenceItem(t *testing.T) {
 	got, ok := requisiteValueAtPosition(content, 9, 12)
 	if !ok || got != "first" {
 		t.Fatalf("requisiteValueAtPosition() = %q, %v, want %q, true", got, ok, "first")
+	}
+}
+
+func TestRequisiteValueAtPositionLongSequence(t *testing.T) {
+	content := `steps:
+  target:
+    file.exists:
+      - name: /tmp/target
+  consumer:
+    file.exists:
+      - requisites:
+        - require:
+` + strings.Repeat("          - target\n", 12)
+
+	for _, line := range []int{8, 16, 19} {
+		t.Run(fmt.Sprintf("line_%d", line), func(t *testing.T) {
+			ref, ok := requisiteValueAtPosition(content, line, 14)
+			if !ok || ref != "target" {
+				t.Errorf("reference = %q, %v; want target, true", ref, ok)
+			}
+			if !isRequisiteValuePosition(content, line, 14) {
+				t.Fatal("step-ID completion must remain available throughout the list")
+			}
+			if _, ok := requisiteValueAtPosition(content, line, 10); ok {
+				t.Fatal("list marker must not be treated as a reference")
+			}
+		})
+	}
+}
+
+func TestRequisiteLookupStopsAtFollowingStep(t *testing.T) {
+	content := `steps:
+  consumer:
+    file.exists:
+      - requisites:
+        - require:
+` + strings.Repeat("          - target\n", 12) + `  following:
+    file.exists:
+      - name: /tmp/following
+      - other:
+          - target`
+	line := 21
+	if ref, ok := requisiteValueAtPosition(content, line, 14); ok {
+		t.Fatalf("unrelated property resolved as requisite %q", ref)
+	}
+	if isRequisiteValuePosition(content, line, 14) {
+		t.Fatal("unrelated property must not receive step-ID completions")
 	}
 }
